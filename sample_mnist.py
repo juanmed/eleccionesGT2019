@@ -141,7 +141,7 @@ def test(modelo, epoca, dispositivo, test_loader):
             pred = output.data.max(1, keepdim=True)[1]
             correctos = correctos + pred.eq(etiquetas.data.view_as(pred)).sum()
 
-        print("Test{}: Avg Loss: {:.2f}, Accuracy: {}/{} ({:.2f}%)".format(epoca, running_loss.item()/len(test_loader.dataset), correctos, len(test_loader.dataset),  100.0*correctos.item()/len(test_loader.dataset)))
+        print("Test {}: Avg Loss: {:.2f}, Accuracy: {}/{} ({:.2f}%)".format(epoca, running_loss.item()/len(test_loader.dataset), correctos, len(test_loader.dataset),  100.0*correctos.item()/len(test_loader.dataset)))
 
     return (running_loss.item()/len(test_loader.dataset), correctos.item()/len(test_loader.dataset))
 
@@ -179,11 +179,16 @@ def main():
         # mostrar algunos numeros
         #desplegar_muestras(test_loader)
 
+        # train
+        train_history = []
+        test_history = []
         for epoch in range(num_epochs):
 
             # one train pass, one tests pass
-            train_history = train(modelo, device, train_loader, epoch, optimizador)
-            test_history = test(modelo, epoch, device, test_loader)
+            train_params = train(modelo, device, train_loader, epoch, optimizador)
+            test_params = test(modelo, epoch, device, test_loader)
+            train_history.append(train_params)
+            test_history.append(test_params)
 
             if save_model and ((epoch % save_frequency) == 0) and epoch != 0 :
                 torch.save(modelo.state_dict(), model_save_path+'mnist_nn_{:03}.pt'.format(epoch))
@@ -191,6 +196,27 @@ def main():
             else:
                 # not moment to save
                 pass
+
+        # draw train history
+        fig = plt.figure(figsize=(20,10))
+        fig.suptitle("MNIST training results")
+        ax1 = fig.add_subplot(1,2,1)
+        ax2 = fig.add_subplot(1,2,2)
+
+        ax1.plot(list(map(lambda x: x[0], train_history)), color = 'b', label = 'train')   # train loss
+        ax1.plot(list(map(lambda x: x[0], test_history)), color = 'r', label = 'test')    # test loss
+        ax2.plot(list(map(lambda x: x[1], train_history)), color = 'b', label = 'train')   # train accuracy
+        ax2.plot(list(map(lambda x: x[1], test_history)), color = 'r', label = 'test')   # train accuracy
+
+        ax1.set_title("Loss")
+        ax1.legend(loc='upper right')
+        ax2.set_title("Accuracy")
+        ax2.legend(loc='lower right')
+
+        fig.savefig("train_history", dpi=200)
+        #plt.show()
+
+
     else:
         #evaluation
         pass
