@@ -2,3 +2,5 @@
 mnist/
 digit_models/
 *.png
+vision/
+actas_original/
