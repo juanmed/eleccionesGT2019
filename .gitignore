@@ -4,3 +4,14 @@ digit_models/
 *.png
 vision/
 actas_original/
+__pycache__/
+actas_dataset/
+actas_procesadas/
+coco_eval.py
+coco_utils.py
+cocoapi/
+engine.py
+etiquetas/
+transforms.py
+utils.py
+
