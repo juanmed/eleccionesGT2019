@@ -7,3 +7,5 @@ torchsummary
 labelImg
 pillow
 cython
+opencv-python
+

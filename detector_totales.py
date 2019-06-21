@@ -3,12 +3,12 @@ import numpy as np
 from PIL import Image
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
-
-
+import cv2
 
 import torch
 import torchvision
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection.faster_rcnn import FasterRCNN, FastRCNNPredictor
+from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision import transforms
 from torchsummary import summary
 
@@ -28,7 +28,8 @@ classes = {'vam':21, 'tod':3, 'une':6, 'uni':7, 'con':13,
            'nul':41, 'bla':42, 'vale': 43, 'inv': 44, 'fue':17,
            'ucn': 9,  'pc':25, 'sem':26, 'pod':4, 'bie':8 }
 
-num_classes = len(classes)+1
+num_classes = len(classes)
+print(">> Total classes: {}".format(num_classes))
 
 #hyperparametros
 num_epochs = 10
@@ -44,6 +45,17 @@ batch_size_test = 5
 img_width = 1634
 img_height = 2182
 
+def get_mobilenet_model(num_classes):
+    # Seguir ejemplo en 
+
+    backbone = torchvision.models.mobilenet_v2(pretrained=True).features
+    backbone.out_channels = 1280
+
+    anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
+    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=[0], output_size=7,sampling_ratio=2)
+
+    model = FasterRCNN(backbone, num_classes=num_classes,rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
+    return model
 
 def get_transform():
     transforms = []
@@ -78,7 +90,11 @@ class ActasLoader(torch.utils.data.Dataset):
         """
         """
         img_path = self.data[index]
-        img = Image.open(img_path).convert("L")
+        img = Image.open(img_path).convert("RGB")
+        #img = cv2.imread(img_path)
+        #print(img.shape)
+        #img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        #img = Image.fromarray(img, mode='RGB')
         print(">> Procesando: {}, {}".format(img_path, img.size))
         target_dict = self.get_labels(img_path.replace('.jpg','.xml'))
 
@@ -135,9 +151,11 @@ def main():
     print(" >> Found {} device".format(device))
 
     # crear red
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)    
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    #model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)    
+    #nodel = FasterRCNN(pretrained = True)
+    model = get_mobilenet_model(num_classes)
+    #in_features = model.roi_heads.box_predictor.cls_score.in_features
+    #model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     model = model.to(device)
     #print(model)
     #summary(model, input_size=(1, img_width, img_height), batch_size=batch_size_train, device='cuda')
