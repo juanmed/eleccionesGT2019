@@ -110,7 +110,11 @@ class ActasLoader(torch.utils.data.Dataset):
 
         boxes = target_dict['boxes']
         area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
-        target_dict["area"] = area
+        target_dict["area"] = area 
+
+        num_objs = len(boxes)
+        iscrowd = torch.zeros((num_objs,), dtype=torch.int64)
+        target_dict["iscrowd"] = iscrowd
 
         if self.transform is not None:
             img, target = self.transform(img, target_dict)
