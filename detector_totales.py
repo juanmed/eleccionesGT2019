@@ -28,6 +28,13 @@ classes = {'vam':21, 'tod':3, 'une':6, 'uni':7, 'con':13,
            'nul':41, 'bla':42, 'vale': 43, 'inv': 44, 'fue':17,
            'ucn': 9,  'pc':25, 'sem':26, 'pod':4, 'bie':8 }
 
+classes = {'vam':0, 'tod':1, 'une':2, 'uni':3, 'con':4,
+           'cre':5, 'fcn':6, 'win':7, 'ppt': 8, 'unid': 9,
+           'eg': 10, 'urn':11, 'vic':12, 'phg':13, 'viv':14,
+           'ava':15, 'lib':16, 'pan':17, 'mlp': 18, 'val':19, 'vali':20,
+           'nul':21, 'bla':22, 'vale': 23, 'inv': 24, 'fue':25,
+           'ucn': 26,  'pc':27, 'sem':28, 'pod':29, 'bie':30 }
+
 num_classes = len(classes)
 print(">> Total classes: {}".format(num_classes))
 
