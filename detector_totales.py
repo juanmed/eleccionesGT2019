@@ -95,6 +95,8 @@ class ActasLoader(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         """
+
+            Referencia: https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
         """
         img_path = self.data[index]
         img = Image.open(img_path).convert("RGB")
@@ -104,6 +106,11 @@ class ActasLoader(torch.utils.data.Dataset):
         #img = Image.fromarray(img, mode='RGB')
         print(">> Procesando: {}, {}".format(img_path, img.size))
         target_dict = self.get_labels(img_path.replace('.jpg','.xml'))
+        target_dict['image_id'] = torch.tensor([index])
+
+        boxes = target_dict['boxes']
+        area = (boxes[:, 3] - boxes[:, 1]) * (boxes[:, 2] - boxes[:, 0])
+        target_dict["area"] = area
 
         if self.transform is not None:
             img, target = self.transform(img, target_dict)
@@ -154,7 +161,7 @@ class ActasLoader(torch.utils.data.Dataset):
 def main():
 
     # verificar si hay GPU
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #torch.device('cpu')
+    device = torch.device('cpu') #torch.device('cuda' if torch.cuda.is_available() else 'cpu') #
     print(" >> Found {} device".format(device))
 
     # crear red
@@ -186,8 +193,8 @@ def main():
         for item in train_dataset:
             pass
 
-        train_loader = torch.utils.data.DataLoader( train_dataset, batch_size = batch_size_train, shuffle = True, collate_fn=utils.collate_fn)
-        test_loader = torch.utils.data.DataLoader( test_dataset, batch_size = batch_size_test, shuffle = True, collate_fn=utils.collate_fn)
+        train_loader = torch.utils.data.DataLoader( train_dataset, batch_size = batch_size_train, shuffle = True, collate_fn=utils.collate_fn, num_workers=4)
+        test_loader = torch.utils.data.DataLoader( test_dataset, batch_size = batch_size_test, shuffle = True, collate_fn=utils.collate_fn, num_workers=4)
 
         for epoch in range(num_epochs):
 
@@ -226,5 +233,6 @@ def main():
         else:
             pass
     """
+
 if __name__ == '__main__':
     main()
