@@ -63,3 +63,20 @@ g) Descarga los datasets de actas de votos de las Elecciones Generales de Guatem
 ```bash
 PENDIENTE!
 ```
+
+
+
+
+
+## Referencias
+
+https://colab.research.google.com/github/pytorch/vision/blob/temp-tutorial/tutorials/torchvision_finetuning_instance_segmentation.ipynb#scrollTo=UYDb7PBw55b-
+https://github.com/pytorch/vision/blob/v0.3.0/references/detection/train.py
+https://github.com/pytorch/vision/tree/v0.3.0/references/detection
+https://github.com/pytorch/vision/blob/master/torchvision/models/detection/faster_rcnn.py
+
+SVHN Dataset
+http://ufldl.stanford.edu/housenumbers/
+
+SVHN Annotation in PASCAL-VOC format
+https://github.com/penny4860/svhn-voc-annotation-format
