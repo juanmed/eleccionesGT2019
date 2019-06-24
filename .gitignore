@@ -15,4 +15,8 @@ etiquetas/
 transforms.py
 utils.py
 *.zip
-
+detector_total_models/
+svhn-voc-annotation-format/
+svhn_dataset/
+test.tar.gz
+train.tar.gz
