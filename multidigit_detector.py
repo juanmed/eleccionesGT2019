@@ -16,7 +16,7 @@ from engine import train_one_epoch, evaluate
 import utils
 import transforms as T
 
-model_save_path = "./detector_total_models/"
+model_save_path = "./multidigit_models/"
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
@@ -26,19 +26,23 @@ if not os.path.exists(model_save_path):
 classes = {'10':0, '1':1, '2':2, '3':3, '4':4,
            '5':5, '6':6, '7':7, '8': 8, '9': 9}
 
+classes_inv = {'0':'0', '1':'1', '2':'2', '3':'3', '4':'4',
+               '5':'5', '6':'6', '7':'7', '8': '8', '9': '9'}
+
 num_classes = len(classes)
 print(">> Total classes: {}".format(num_classes))
 
 #hyperparametros
-num_epochs = 10
+num_epochs = 11
 learning_rate = 0.005
 momentum = 0.5
 weight_decay = 0.005
-save_model = False
-save_frequency = 2
+save_model = True
+save_frequency = 5
 
-batch_size_train = 8
+batch_size_train = 4
 batch_size_test = 8
+batch_size_val = 8
 
 img_width = 1634
 img_height = 2182
@@ -51,10 +55,14 @@ def get_mobilenet_model(num_classes):
     backbone = torchvision.models.mobilenet_v2(pretrained=True).features
     backbone.out_channels = 1280
 
-    anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
+    anchor_generator = AnchorGenerator(sizes=((32, 64, 128),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=[0], output_size=7,sampling_ratio=2)
 
-    model = FasterRCNN(backbone, num_classes=num_classes,rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
+    # stats for test images
+    #Original Width avg 172.58  std_dev 122.58 min 31 max 1083
+    #Original Height avg 105.00 std_dev 52.75 min 13 max 516
+
+    model = FasterRCNN(backbone, num_classes=num_classes, min_size=100, max_size=300, rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
     return model
 
 def get_transform():
@@ -86,6 +94,8 @@ class ActasLoader(torch.utils.data.Dataset):
             self.data = [(self.root + 'val/' + x) for x in self.val_dir if '.xml' not in x]
         else:
             raise RuntimeError('{} is not a valid split. Use -test-, -train- or -val-. '.format(self.split))
+
+        self.data = self.data[0:len(self.data)//128]
 
     def __getitem__(self, index):
         """
@@ -161,7 +171,7 @@ class ActasLoader(torch.utils.data.Dataset):
 def main():
 
     # verificar si hay GPU
-    device = torch.device('cpu') #torch.device('cuda' if torch.cuda.is_available() else 'cpu') #
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #
     print(" >> Found {} device".format(device))
 
     # crear red
@@ -179,19 +189,16 @@ def main():
     optimizer = torch.optim.SGD(params, lr=learning_rate, momentum=momentum, weight_decay=weight_decay )
 
     # programador de learning rate
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.1)
 
 
-    do_learn = True
+    do_learn = False
     if(do_learn):
         # load datasets
         trans = transforms.Compose([transforms.ToTensor()]) #transforms.Resize((img_height, img_width)),
         #trans = get_transform()
         train_dataset = ActasLoader(root = './svhn_dataset/', split='train', transform = trans)
         test_dataset = ActasLoader(root = './svhn_dataset/', split='test', transform = trans)
-        
-        #for item in train_dataset:
-        #    pass
 
         train_loader = torch.utils.data.DataLoader( train_dataset, batch_size = batch_size_train, shuffle = True, collate_fn=utils.collate_fn, num_workers=4)
         test_loader = torch.utils.data.DataLoader( test_dataset, batch_size = batch_size_test, shuffle = True, collate_fn=utils.collate_fn, num_workers=4)
@@ -203,36 +210,81 @@ def main():
             evaluate(model, test_loader, device=device)
 
             if save_model and ((epoch % save_frequency) == 0) and epoch != 0 :
-                torch.save(modelo.state_dict(), model_save_path+'mnist_nn_{:03}.pt'.format(epoch))
-                print(">> Saving model: {}".format(model_save_path+'mnist_nn_{:03}.pt'.format(epoch)))
+                
+                utils.save_on_master({'model': model.state_dict(),
+                                      'optimizer': optimizer.state_dict(),
+                                      'lr_scheduler': lr_scheduler.state_dict()},
+                                      #'args':
+                                      os.path.join(model_save_path, 'multidigit_nn_{:03}.pt'.format(epoch)))
+
+                print(">> Saving model: {}".format(model_save_path+'multidigit_nn_{:03}.pt'.format(epoch)))
             else:
                 # not moment to save
                 pass
 
-        #img, target = train_dataset[0]
-        #for box, lbl in zip(target['boxes'], target['labels']):
-        #    print(box,lbl)
     else:
-        pass
+        # load eval data
+        trans = get_transform()
+        val_dataset = ActasLoader(root = './svhn_dataset/', split='test', transform = trans)        
+        val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
+        
+        checkpoint = torch.load(model_save_path+"multidigit_nn_010.pt", map_location='cpu')
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
+        model.eval()
+
+        # evaluate batch
+        #coco_eval, output = eval(model, val_loader, device)
+        #print(coco_eval)
+        #print(output)
+
+        # evaluate single images, draw boxes and save
+        fig = plt.figure()
+        ax = fig.add_subplot(1,1,1)
 
 
-    #plt.imshow(img)
-    #plt.show()
+        val_dir = './svhn_dataset/test/'
+        img_dirs = os.listdir(val_dir)
+        img_dirs = [(val_dir + x) for x in img_dirs if '.xml' not in x]
 
-    
-    """
-    class_id = []
-    for key in classes.keys():
-        class_id.append(classes[key])
+        for img_dir in img_dirs[0:5]:
 
-    a = np.arange(30)
-    print (a)
-    for id in a:
-        if id not in class_id:
-            print(id)
-        else:
-            pass
-    """
+            image = cv2.imread(img_dir)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image2 = Image.fromarray(image, mode='RGB')
+            image2 = transforms.ToTensor()(image2)
+
+            image2 = [image2.to(device)]
+            output = model(image2)[0]
+            print(output)
+
+            #image = image.to(torch.device('cpu')).permute(1, 2, 0).numpy()*255 
+
+            for i , (box, lbl, conf) in enumerate(zip(output['boxes'], output['labels'], output['scores'])):
+
+                # get colors for bounding boxes
+                col1 = np.random.randint(0,256)
+                col2 = np.random.randint(0,256)
+                col3 = np.random.randint(0,256)
+                
+                #print(box)
+                xmin = int(box[0].item())
+                ymin = int(box[1].item())
+                xmax = int(box[2].item())
+                ymax = int(box[3].item())
+                #print(xmin, ymin, xmax, ymax)
+                cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),1)
+                lbl = classes_inv[str(lbl.item())]
+                #print(lbl, '{:.2f}'.format(conf))
+                cv2.putText(image, lbl, (xmin + 5, ymin + 5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+                cv2.putText(image, '{:.2f}'.format(conf), (xmin + 20, ymin +5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+
+            ax.imshow(image)
+            fig.savefig("{}".format(img_dir.split('/')[-1]))
+
+
+
 
 if __name__ == '__main__':
     main()

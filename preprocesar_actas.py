@@ -5,6 +5,8 @@ import numpy as np
 actas_dir = './actas_original/'
 save_dir = './actas_procesadas/'
 
+svhn_dir = './svhn_dataset/test/'
+
 if not os.path.exists(save_dir):
     os.mkdir(save_dir)
 
@@ -41,23 +43,26 @@ def main():
 		necesita que todas las images tengan las mismas dimensiones
 	"""
 	
-	img_names = os.listdir(actas_dir)
+	img_names = os.listdir(svhn_dir)
+	img_names = [x for x in img_names if '.xml' not in x]
 	w = []
 	h = []
 
 	for img_name in img_names:
 
-		img = Image.open(actas_dir + img_name)
+		img = Image.open(svhn_dir + img_name)
 		width, height = img.size
 
 		w.append(width)
 		h.append(height)
+
 	print("Original Width avg {:.2f}  std_dev {:.2f} min {} max {}".format(np.mean(w), np.std(w), np.min(w), np.max(w)))
-	print("Original Height avg {:.2f} std_dev {:.2f} min {} max {}".format(np.mean(height), np.std(w), np.min(h), np.max(h)))
+	print("Original Height avg {:.2f} std_dev {:.2f} min {} max {}".format(np.mean(height), np.std(h), np.min(h), np.max(h)))
 
 	new_width = np.min(w)
 	new_height = np.min(h)
-
+	"""
+	# center crop
 	for img_name in img_names:
 
 		img = Image.open(actas_dir + img_name)
@@ -87,6 +92,7 @@ def main():
 	
 	print("\nNew Width avg {:.2f}  std_dev {:.2f} min {} max {}".format(np.mean(w), np.std(w), np.min(w), np.max(w)))
 	print(" New Height avg {:.2f} std_dev {:.2f} min {} max {}".format(np.mean(height), np.std(w), np.min(h), np.max(h)))
+	"""
 
 if __name__ == '__main__':
 	main()

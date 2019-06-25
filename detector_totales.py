@@ -25,7 +25,7 @@ if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
 
-classes = {'vam':21, 'tod':3, 'une':6, 'uni':7, 'con':13,
+classes2 = {'vam':21, 'tod':3, 'une':6, 'uni':7, 'con':13,
            'cre':14, 'fcn':12, 'win':16, 'ppt': 19, 'unid': 18,
            'eg': 10, 'urn':5, 'vic':15, 'phg':23, 'viv':11,
            'ava':22, 'lib':27, 'pan':1, 'mlp': 24, 'val':2, 'vali':40,
@@ -39,6 +39,13 @@ classes = {'vam':0, 'tod':1, 'une':2, 'uni':3, 'con':4,
            'nul':21, 'bla':22, 'vale': 23, 'inv': 24, 'fue':25,
            'ucn': 26,  'pc':27, 'sem':28, 'pod':29, 'bie':30 }
 
+classes_inv = {'0':'vam', '1':'tod', '2':'une', '3':'uni', '4':'con',
+               '5':'cre', '6':'fcn', '7':'win', '8':'ppt', '9':'unid',
+               '10':'eg', '11':'urn', '12':'vic', '13':'phg', '14':'viv',
+               '15':'ava', '16':'lib', '17':'pan', '18':'mlp', '19':'val', '20':'vali',
+               '21':'nul', '22':'bla', '23':'vale', '24':'inv', '25':'fue',
+               '26':'ucn',  '27':'pc', '28':'sem', '29':'pod', '30':'bie' }           
+
 num_classes = len(classes)
 print(">> Total classes: {}".format(num_classes))
 
@@ -50,7 +57,7 @@ weight_decay = 0.005
 save_model = True
 save_frequency = 1
 
-batch_size_train = 2
+batch_size_train = 1
 batch_size_test = 5
 batch_size_val = 5
 
@@ -65,17 +72,16 @@ def get_mobilenet_model(num_classes):
     backbone = torchvision.models.mobilenet_v2(pretrained=True).features
     backbone.out_channels = 1280
 
-    anchor_generator = AnchorGenerator(sizes=((32, 64, 128, 256, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
+    anchor_generator = AnchorGenerator(sizes=((32, 128, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
     roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=[0], output_size=7,sampling_ratio=2)
 
-    model = FasterRCNN(backbone, num_classes=num_classes,rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
+    model = FasterRCNN(backbone, num_classes=num_classes, min_size=800, max_size=800, rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
     return model
 
 def get_transform():
     transforms = []
     # converts the image, a PIL image, into a PyTorch Tensor
-    transforms.append(T.ToTensor())
-    #transforms.append(T.Resize((img_height, img_width)))
+    transforms.append(T.ToTensor2())
     return T.Compose(transforms)
 
 class ActasLoader(torch.utils.data.Dataset):
@@ -91,7 +97,6 @@ class ActasLoader(torch.utils.data.Dataset):
         self.val_dir = os.listdir(self.root + 'val/')
 
         if (self.split == 'train'):
-            #self.data = map(lambda x: (self.root + 'train/' + x) if '.xml' not in x, self.train_dir)
             self.data = [(self.root + 'train/' + x) for x in self.train_dir if '.xml' not in x]
         elif(self.split == 'test'):
             self.data = [(self.root + 'test/' + x) for x in self.test_dir if '.xml' not in x]
@@ -212,14 +217,14 @@ def eval(model, data_loader, device):
 def main():
 
     # verificar si hay GPU
-    device = torch.device('cpu') #torch.device('cuda' if torch.cuda.is_available() else 'cpu') #
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu') #
     print(" >> Found {} device".format(device))
 
     # crear red
-    model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)    
-    #model = get_mobilenet_model(num_classes)
-    in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
+    #model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)    
+    model = get_mobilenet_model(num_classes)
+    #in_features = model.roi_heads.box_predictor.cls_score.in_features
+    #model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     model = model.to(device)
     print(model)
     #summary(model, input_size=(1, img_width, img_height), batch_size=batch_size_train, device='cuda')
@@ -232,7 +237,7 @@ def main():
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
 
-    do_learn = True
+    do_learn = False
     if(do_learn):
         # load datasets
         #trans = transforms.Compose([ transforms.Resize((img_height, img_width)), transforms.ToTensor()])
@@ -250,7 +255,6 @@ def main():
             evaluate(model, test_loader, device=device)
 
             if save_model and ((epoch % save_frequency) == 0) and epoch != 0 :
-                #torch.save(model, model_save_path+'detector_totales_nn_{:03}.pt'.format(epoch))
                 
                 utils.save_on_master({'model': model.state_dict(),
                                       'optimizer': optimizer.state_dict(),
@@ -267,21 +271,68 @@ def main():
         # load eval data
         trans = get_transform()
         val_dataset = ActasLoader(root = './actas_dataset/', split='test', transform = trans)        
-        val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = True, collate_fn=utils.collate_fn, num_workers=4)
+        val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
         
-        checkpoint = torch.load(model_save_path+"detector_totales_nn_200.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+"detector_totales_nn_2000.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])     
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
+        model.eval()
 
-        #model=torch.load(model_save_path+"detector_totales_nn_002.pt")
-        #model.to(device)    
-        #model.load_state_dict(torch.load(model_save_path+"detector_totales_nn_200.pt"))
-        
+        # evaluate batch
+        #coco_eval, output = eval(model, val_loader, device)
+        #print(coco_eval)
+        #print(output)
 
-        coco_eval, output = eval(model, val_loader, device)
-        print(coco_eval)
-        print(output)
+        # evaluate single images, draw boxes and save
+        fig = plt.figure(figsize=(20,10))
+        ax = fig.add_subplot(1,1,1)
+
+
+        val_dir = './actas_dataset/test/'
+        img_dirs = os.listdir(val_dir)
+        img_dirs = [(val_dir + x) for x in img_dirs if '.xml' not in x]
+
+        for img_dir in img_dirs:
+
+            image = cv2.imread(img_dir)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            image2 = Image.fromarray(image, mode='RGB')
+            image2 = transforms.ToTensor()(image2)
+
+            image2 = [image2.to(device)]
+            output = model(image2)[0]
+            
+            #image = image.to(torch.device('cpu')).permute(1, 2, 0).numpy()*255 
+
+            for i , (box, lbl, conf) in enumerate(zip(output['boxes'], output['labels'], output['scores'])):
+
+                # get colors for bounding boxes
+                col1 = np.random.randint(0,256)
+                col2 = np.random.randint(0,256)
+                col3 = np.random.randint(0,256)
+                
+                #print(box)
+                xmin = int(box[0].item())
+                ymin = int(box[1].item())
+                xmax = int(box[2].item())
+                ymax = int(box[3].item())
+                print(xmin, ymin, xmax, ymax)
+                cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),2)
+                lbl = classes_inv[str(lbl.item())]
+                print(lbl, '{:.2f}'.format(conf))
+                cv2.putText(image, lbl, (xmin + 5, ymin + 5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+                cv2.putText(image, '{:.2f}'.format(conf), (xmin + 100, ymin +5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+
+            ax.imshow(image)
+            fig.savefig("{}".format(img_dir.split('/')[-1]), dpi = 250)
+
+
+
+
+
+
+
 
 
 
