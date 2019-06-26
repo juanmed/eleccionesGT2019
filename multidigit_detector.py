@@ -39,6 +39,8 @@ momentum = 0.5
 weight_decay = 0.005
 save_model = True
 save_frequency = 5
+step_size = 80
+gamma = 0.5
 
 batch_size_train = 4
 batch_size_test = 8
@@ -189,10 +191,17 @@ def main():
     optimizer = torch.optim.SGD(params, lr=learning_rate, momentum=momentum, weight_decay=weight_decay )
 
     # programador de learning rate
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=4, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+
+    resume = True
+    if(resume):
+        checkpoint = torch.load(model_save_path+"multidigit_nn_010.pt", map_location='cpu')
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
 
-    do_learn = False
+    do_learn = True
     if(do_learn):
         # load datasets
         trans = transforms.Compose([transforms.ToTensor()]) #transforms.Resize((img_height, img_width)),
@@ -228,10 +237,10 @@ def main():
         val_dataset = ActasLoader(root = './svhn_dataset/', split='test', transform = trans)        
         val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
         
-        checkpoint = torch.load(model_save_path+"multidigit_nn_010.pt", map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
+        #checkpoint = torch.load(model_save_path+"multidigit_nn_010.pt", map_location='cpu')
+        #model.load_state_dict(checkpoint['model'])
+        #optimizer.load_state_dict(checkpoint['optimizer'])
+        #lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
         model.eval()
 
         # evaluate batch
@@ -248,7 +257,7 @@ def main():
         img_dirs = os.listdir(val_dir)
         img_dirs = [(val_dir + x) for x in img_dirs if '.xml' not in x]
 
-        for img_dir in img_dirs[0:5]:
+        for img_dir in img_dirs[20:30]:
 
             image = cv2.imread(img_dir)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -263,22 +272,23 @@ def main():
 
             for i , (box, lbl, conf) in enumerate(zip(output['boxes'], output['labels'], output['scores'])):
 
-                # get colors for bounding boxes
-                col1 = np.random.randint(0,256)
-                col2 = np.random.randint(0,256)
-                col3 = np.random.randint(0,256)
-                
-                #print(box)
-                xmin = int(box[0].item())
-                ymin = int(box[1].item())
-                xmax = int(box[2].item())
-                ymax = int(box[3].item())
-                #print(xmin, ymin, xmax, ymax)
-                cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),1)
-                lbl = classes_inv[str(lbl.item())]
-                #print(lbl, '{:.2f}'.format(conf))
-                cv2.putText(image, lbl, (xmin + 5, ymin + 5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
-                cv2.putText(image, '{:.2f}'.format(conf), (xmin + 20, ymin +5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+                if(conf > 0.4):
+                    # get colors for bounding boxes
+                    col1 = np.random.randint(0,256)
+                    col2 = np.random.randint(0,256)
+                    col3 = np.random.randint(0,256)
+                    
+                    #print(box)
+                    xmin = int(box[0].item())
+                    ymin = int(box[1].item())
+                    xmax = int(box[2].item())
+                    ymax = int(box[3].item())
+                    #print(xmin, ymin, xmax, ymax)
+                    #cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),1)
+                    lbl = classes_inv[str(lbl.item())]
+                    #print(lbl, '{:.2f}'.format(conf))
+                    cv2.putText(image, lbl, (xmin + 5, ymin + 10),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (col1, col2, col3), 1)
+                    #cv2.putText(image, '{:.2f}'.format(conf), (xmin + 20, ymin +10),cv2.FONT_HERSHEY_SIMPLEX, 0.25, (col1, col2, col3), 1)
 
             ax.imshow(image)
             fig.savefig("{}".format(img_dir.split('/')[-1]))
