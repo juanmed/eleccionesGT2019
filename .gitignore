@@ -13,7 +13,6 @@ coco_utils.py
 cocoapi/
 engine.py
 etiquetas/
-transforms.py
 utils.py
 *.zip
 detector_total_models/
