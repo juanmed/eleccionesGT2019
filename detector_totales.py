@@ -56,6 +56,8 @@ momentum = 0.5
 weight_decay = 0.005
 save_model = True
 save_frequency = 1
+step_size = 1
+gamma = 0.1
 
 batch_size_train = 1
 batch_size_test = 5
@@ -234,7 +236,7 @@ def main():
     optimizer = torch.optim.SGD(params, lr=learning_rate, momentum=momentum, weight_decay=weight_decay )
 
     # programador de learning rate
-    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
     resume = False
     if(resume):
@@ -266,9 +268,9 @@ def main():
                                       'optimizer': optimizer.state_dict(),
                                       'lr_scheduler': lr_scheduler.state_dict()},
                                       #'args':
-                                      os.path.join(model_save_path, 'detector_totales_nn_{:03}.pt'.format(epoch)))
+                                      os.path.join(model_save_path, 'detector_totales_mn_{:03}.pt'.format(epoch)))
 
-                print(">> Saving model: {}".format(model_save_path+'detector_totales_nn_{:03}.pt'.format(epoch)))
+                print(">> Saving model: {}".format(model_save_path+'detector_totales_mn_{:03}.pt'.format(epoch)))
             else:
                 # not moment to save
                 pass
