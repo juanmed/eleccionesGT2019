@@ -48,18 +48,17 @@ classes_inv = {'0':'vam', '1':'tod', '2':'une', '3':'uni', '4':'con',
 
 num_classes = len(classes)
 print(">> Total classes: {}".format(num_classes))
-
-#hyperparametros
-num_epochs = 10
+#hyperparametqros
+num_epochs = 4001
 learning_rate = 0.005
 momentum = 0.5
 weight_decay = 0.005
 save_model = True
-save_frequency = 1
-step_size = 1
-gamma = 0.1
+save_frequency = 500
+step_size = 1000
+gamma = 0.5
 
-batch_size_train = 1
+batch_size_train = 16
 batch_size_test = 5
 batch_size_val = 5
 
@@ -240,7 +239,7 @@ def main():
 
     resume = False
     if(resume):
-        checkpoint = torch.load(model_save_path+"detector_totales_nn_2000.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+"detector_totales_mn_004.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
@@ -257,10 +256,15 @@ def main():
         test_loader = torch.utils.data.DataLoader( test_dataset, batch_size = batch_size_test, shuffle = True, collate_fn=utils.collate_fn, num_workers=4)
 
         for epoch in range(num_epochs):
-
+            
+            t1 = time.time()
             train_one_epoch(model, optimizer, train_loader, device, epoch, print_freq=1)
+            t2 = time.time()
+            print("Epoch time: {:.2f}".format(t2 - t1))
             lr_scheduler.step()  # refrescar taza de aprendizaje
-            evaluate(model, test_loader, device=device)
+            
+            if ((epoch % 50) == 0):
+                evaluate(model, test_loader, device=device)
 
             if save_model and ((epoch % save_frequency) == 0) and epoch != 0 :
                 
