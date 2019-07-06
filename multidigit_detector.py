@@ -1,5 +1,6 @@
 import os
 import numpy as np
+import time
 from PIL import Image
 import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
@@ -12,9 +13,12 @@ from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision import transforms
 from torchsummary import summary
 
-from engine import train_one_epoch, evaluate
+from engine import train_one_epoch, evaluate, _get_iou_types
 import utils
 import transforms as T
+
+from coco_utils import get_coco_api_from_dataset
+from coco_eval import CocoEvaluator
 
 model_save_path = "./multidigit_models/"
 if not os.path.exists(model_save_path):
@@ -170,6 +174,47 @@ class ActasLoader(torch.utils.data.Dataset):
 
         return target_dict
 
+def eval(model, data_loader, device):
+    n_threads = torch.get_num_threads()
+    # FIXME remove this and make paste_masks_in_image run on the GPU
+    torch.set_num_threads(1)
+    cpu_device = torch.device("cpu")
+    model.eval()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = 'Test:'
+
+    coco = get_coco_api_from_dataset(data_loader.dataset)
+    iou_types = _get_iou_types(model)
+    coco_evaluator = CocoEvaluator(coco, iou_types)
+
+    for image, targets in metric_logger.log_every(data_loader, 100, header):
+        image = list(img.to(device) for img in image)
+        targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
+
+        torch.cuda.synchronize()
+        model_time = time.time()
+        outputs1 = model(image)
+
+        outputs = [{k: v.to(cpu_device) for k, v in t.items()} for t in outputs1]
+        model_time = time.time() - model_time
+
+        res = {target["image_id"].item(): output for target, output in zip(targets, outputs)}
+        evaluator_time = time.time()
+        coco_evaluator.update(res)
+        evaluator_time = time.time() - evaluator_time
+        metric_logger.update(model_time=model_time, evaluator_time=evaluator_time)
+
+    # gather the stats from all processes
+    metric_logger.synchronize_between_processes()
+    print("Averaged stats:", metric_logger)
+    coco_evaluator.synchronize_between_processes()
+
+    # accumulate predictions from all images
+    coco_evaluator.accumulate()
+    coco_evaluator.summarize()
+    torch.set_num_threads(n_threads)
+    return coco_evaluator, outputs1
+
 def main():
 
     # verificar si hay GPU
@@ -195,13 +240,13 @@ def main():
 
     resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+"multidigit_nn_010.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+"multidigit_nn_190.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
 
-    do_learn = True
+    do_learn = False
     if(do_learn):
         # load datasets
         trans = transforms.Compose([transforms.ToTensor()]) #transforms.Resize((img_height, img_width)),
@@ -233,7 +278,7 @@ def main():
 
     else:
         # load eval data
-        trans = get_transform()
+        trans = transforms.Compose([transforms.ToTensor()]) #get_transform()
         val_dataset = ActasLoader(root = './svhn_dataset/', split='test', transform = trans)        
         val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
         
@@ -253,11 +298,12 @@ def main():
         ax = fig.add_subplot(1,1,1)
 
 
-        val_dir = './svhn_dataset/test/'
+        val_dir = './svhn_dataset/val/'
         img_dirs = os.listdir(val_dir)
+        #print(img_dirs)
         img_dirs = [(val_dir + x) for x in img_dirs if '.xml' not in x]
 
-        for img_dir in img_dirs[20:30]:
+        for img_dir in img_dirs:
 
             image = cv2.imread(img_dir)
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -272,7 +318,7 @@ def main():
 
             for i , (box, lbl, conf) in enumerate(zip(output['boxes'], output['labels'], output['scores'])):
 
-                if(conf > 0.4):
+                if(conf > 0.1):
                     # get colors for bounding boxes
                     col1 = np.random.randint(0,256)
                     col2 = np.random.randint(0,256)
@@ -284,7 +330,7 @@ def main():
                     xmax = int(box[2].item())
                     ymax = int(box[3].item())
                     #print(xmin, ymin, xmax, ymax)
-                    #cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),1)
+                    cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),1)
                     lbl = classes_inv[str(lbl.item())]
                     #print(lbl, '{:.2f}'.format(conf))
                     cv2.putText(image, lbl, (xmin + 5, ymin + 10),cv2.FONT_HERSHEY_SIMPLEX, 0.5, (col1, col2, col3), 1)
@@ -292,9 +338,6 @@ def main():
 
             ax.imshow(image)
             fig.savefig("{}".format(img_dir.split('/')[-1]))
-
-
-
 
 if __name__ == '__main__':
     main()

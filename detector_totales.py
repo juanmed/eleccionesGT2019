@@ -236,8 +236,14 @@ def main():
     # programador de learning rate
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
 
+    resume = False
+    if(resume):
+        checkpoint = torch.load(model_save_path+"detector_totales_nn_2000.pt", map_location='cpu')
+        model.load_state_dict(checkpoint['model'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
-    do_learn = False
+    do_learn = True
     if(do_learn):
         # load datasets
         #trans = transforms.Compose([ transforms.Resize((img_height, img_width)), transforms.ToTensor()])
@@ -273,10 +279,10 @@ def main():
         val_dataset = ActasLoader(root = './actas_dataset/', split='test', transform = trans)        
         val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
         
-        checkpoint = torch.load(model_save_path+"detector_totales_nn_2000.pt", map_location='cpu')
-        model.load_state_dict(checkpoint['model'])
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
+        #checkpoint = torch.load(model_save_path+"detector_totales_nn_2000.pt", map_location='cpu')
+        #model.load_state_dict(checkpoint['model'])
+        #optimizer.load_state_dict(checkpoint['optimizer'])
+        #lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
         model.eval()
 
         # evaluate batch
@@ -326,16 +332,6 @@ def main():
 
             ax.imshow(image)
             fig.savefig("{}".format(img_dir.split('/')[-1]), dpi = 250)
-
-
-
-
-
-
-
-
-
-
 
 if __name__ == '__main__':
     main()
