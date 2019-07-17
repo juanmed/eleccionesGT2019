@@ -4,7 +4,6 @@ Este proyecto utiliza algoritmos de inteligencia artificial y visión por comput
 
 El flujo es sencillo: se obtiene un acta, se "dibujan" rectangulos que contengan cada total de interés, se extrae el total en cada rectángulo, y se genera un reporte (en formato .json).
 
-![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000011.jpg)
 ![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000102.jpg)
 ![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/7.png)
 
