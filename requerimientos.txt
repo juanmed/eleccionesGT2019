@@ -8,4 +8,8 @@ labelImg
 pillow
 cython
 opencv-python
-
+pillow
+pytesseract
+jupyter
+sklearn
+scikit-image

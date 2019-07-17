@@ -59,8 +59,8 @@ step_size = 1000
 gamma = 0.5
 
 batch_size_train = 16
-batch_size_test = 5
-batch_size_val = 5
+batch_size_test = 1
+batch_size_val = 1
 
 img_width = 1634
 img_height = 2182
@@ -237,14 +237,14 @@ def main():
     # programador de learning rate
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
-    resume = False
+    resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+"detector_totales_mn_004.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+"detector_totales_mn_12000.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
-    do_learn = True
+    do_learn = False
     if(do_learn):
         # load datasets
         #trans = transforms.Compose([ transforms.Resize((img_height, img_width)), transforms.ToTensor()])
@@ -292,12 +292,12 @@ def main():
         model.eval()
 
         # evaluate batch
-        #coco_eval, output = eval(model, val_loader, device)
-        #print(coco_eval)
-        #print(output)
+        coco_eval, output = eval(model, val_loader, device)
+        print(coco_eval)
+        print(output)
 
         # evaluate single images, draw boxes and save
-        fig = plt.figure(figsize=(20,10))
+        fig = plt.figure(figsize=(10,10))
         ax = fig.add_subplot(1,1,1)
 
 
@@ -319,22 +319,23 @@ def main():
 
             for i , (box, lbl, conf) in enumerate(zip(output['boxes'], output['labels'], output['scores'])):
 
-                # get colors for bounding boxes
-                col1 = np.random.randint(0,256)
-                col2 = np.random.randint(0,256)
-                col3 = np.random.randint(0,256)
-                
-                #print(box)
-                xmin = int(box[0].item())
-                ymin = int(box[1].item())
-                xmax = int(box[2].item())
-                ymax = int(box[3].item())
-                print(xmin, ymin, xmax, ymax)
-                cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),2)
-                lbl = classes_inv[str(lbl.item())]
-                print(lbl, '{:.2f}'.format(conf))
-                cv2.putText(image, lbl, (xmin + 5, ymin + 5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
-                cv2.putText(image, '{:.2f}'.format(conf), (xmin + 100, ymin +5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+                if (conf > 0.4):
+                    # get colors for bounding boxes
+                    col1 = np.random.randint(0,256)
+                    col2 = np.random.randint(0,256)
+                    col3 = np.random.randint(0,256)
+                    
+                    #print(box)
+                    xmin = int(box[0].item())
+                    ymin = int(box[1].item())
+                    xmax = int(box[2].item())
+                    ymax = int(box[3].item())
+                    #print(xmin, ymin, xmax, ymax)
+                    cv2.rectangle(image,(xmin,ymin),(xmax,ymax),(col1,col2,col3),2)
+                    lbl = classes_inv[str(lbl.item())]
+                    #print(lbl, '{:.2f}'.format(conf))
+                    cv2.putText(image, lbl, (xmin + 5, ymin + 5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
+                    cv2.putText(image, '{:.2f}'.format(conf), (xmin + 100, ymin +5),cv2.FONT_HERSHEY_SIMPLEX, 1, (col1, col2, col3), 2)
 
             ax.imshow(image)
             fig.savefig("{}".format(img_dir.split('/')[-1]), dpi = 250)

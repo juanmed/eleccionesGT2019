@@ -1,8 +1,6 @@
 .tse/
 mnist/
 digit_models/
-*.png
-*.jpg
 vision/
 actas_original/
 __pycache__/
@@ -21,3 +19,4 @@ svhn_dataset/
 test.tar.gz
 train.tar.gz
 multidigit_models/
+election_count_helper/

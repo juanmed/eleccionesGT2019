@@ -1,5 +1,14 @@
 # Verificación Automática de Resultados de Elecciones Generales Guatemala 2019
 
+Este proyecto utiliza algoritmos de inteligencia artificial y visión por computadora para procesar imágenes de actas de votaciones y obtener los resultados de votos por partido y totales relevantes (votos válidos, nulos, etc).
+
+El flujo es sencillo: se obtiene un acta, se "dibujan" rectangulos que contengan cada total de interés, se extrae el total en cada rectángulo, y se genera un reporte (en formato .json).
+
+![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000011.jpg)
+![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000102.jpg)
+![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/7.png)
+
+
 # Instalacion
 
 Para utilizar este repositorio, se necesitan algunas herramientas previo a ejecutar los scripts. Los scripts fueron creados para ser interpretados en Python 3.x en Ubuntu16.04.
@@ -25,13 +34,17 @@ Crea y carga un ambiente virtual que utilice Python3.x. Por ejemplo, en este cas
 virtualenv -p /usr/lib/python3.5 .tse
 source .tse/bin/activate
 ```
-c) Instala los paquetes necesarios
+c) Instala los paquetes y herramientas necesarias
 
 El siguiente comando instalara (casi) todos los paquetes necesarios para ejecutar los scripts (torch, torchvision, numpy, etc).
 
 ```bash
 python -m pip install -r requerimientos.txt
+sudo apt install tesseract-ocr
+sudo apt install libtesseract-dev
 ```
+
+* Si hubiese algún problema con en la instalación de pytesseract, seguir la [información oficial](https://github.com/tesseract-ocr/tesseract/wiki).
 
 e) Descargar e instala pycocotools
 
@@ -71,9 +84,13 @@ PENDIENTE!
 ## Referencias
 
 https://colab.research.google.com/github/pytorch/vision/blob/temp-tutorial/tutorials/torchvision_finetuning_instance_segmentation.ipynb#scrollTo=UYDb7PBw55b-
+
 https://github.com/pytorch/vision/blob/v0.3.0/references/detection/train.py
+
 https://github.com/pytorch/vision/tree/v0.3.0/references/detection
+
 https://github.com/pytorch/vision/blob/master/torchvision/models/detection/faster_rcnn.py
+
 
 SVHN Dataset
 http://ufldl.stanford.edu/housenumbers/
