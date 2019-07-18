@@ -35,13 +35,13 @@ source .tse/bin/activate
 ```
 c) Instala los paquetes y herramientas necesarias
 
-El siguiente comando instalara (casi) todos los paquetes necesarios para ejecutar los scripts (torch, torchvision, numpy, etc).
+Los siguientes comandos instalara (casi) todos los paquetes necesarios para ejecutar los scripts (torch, torchvision, numpy, etc).
 
 ```bash
 python -m pip install -r requerimientos.txt
-sudo apt install tesseract-ocr
-sudo apt install libtesseract-dev
 ```
+
+Es necesario installar tesseract (usando el código fuente) y pytesseract. En [este link](https://lengerrong.blogspot.com/2017/03/how-to-build-latest-tesseract-leptonica.html) se puede encontrar el procedimiento. Tesseract necesita algunos [archivos de extensión .traineddata](https://github.com/tesseract-ocr/tessdata) para trabajar con distintos lenguajes: estos se deberían almacenar en ```/usr/local/share/tessdata```. Cuando yo seguí este procedimiento, dicho folder estaba vacío y mi código no funcionaba. La solución es descargarlos según el lenguaje a utilizar y guardarlos en la carpeta indicada. Yo descargué y guarde en esa carpeta el archivo ```eng.traineddata``` que corresponde al idioma inglés.
 
 * Si hubiese algún problema con en la instalación de pytesseract, seguir la [información oficial](https://github.com/tesseract-ocr/tesseract/wiki).
 

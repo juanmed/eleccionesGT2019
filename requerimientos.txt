@@ -13,3 +13,5 @@ pytesseract
 jupyter
 sklearn
 scikit-image
+keras
+tensorflow-gpu

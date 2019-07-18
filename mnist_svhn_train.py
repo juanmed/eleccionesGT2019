@@ -4,6 +4,8 @@ import numpy as np
 import matplotlib.pyplot as plt 
 
 import torch
+import torch.nn as nn
+
 import torchvision
 from torchvision import transforms
 import torch.optim as optim
@@ -11,21 +13,22 @@ from torchsummary import summary
 import torch.nn.functional as F 
 
 from models.lenet import LeNet 
+from models.mnist_resnet import MNISTResNet
 import utils
 
 
 model_save_path = "./weights/"
-weight_file = "mnist_svhn_"
+weight_file = "mnist_svhn_resnet"
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
 #hyperparametros
-num_epochs = 401
+num_epochs = 4
 learning_rate = 0.005
 momentum = 0.5
 weight_decay = 0.005
 save_model = True
-save_frequency = 100
+save_frequency = 2
 step_size = 150
 gamma = 0.5
 img_size = 32
@@ -77,7 +80,7 @@ class MNIST_SVHN_Dataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.mnist_data) + len(self.svhn_data)
 
-def train(modelo, dispositivo, train_loader, epoca, optimizador):
+def train(modelo, dispositivo, train_loader, epoca, optimizador, criterion):
     """
     """
     modelo.train()
@@ -94,7 +97,7 @@ def train(modelo, dispositivo, train_loader, epoca, optimizador):
         optimizador.zero_grad()
 
         output = modelo(data)       # obtener predicciones
-        loss = F.nll_loss(output, etiquetas)
+        loss = criterion(output, etiquetas)
         loss.backward()
 
         optimizador.step()
@@ -108,7 +111,7 @@ def train(modelo, dispositivo, train_loader, epoca, optimizador):
     
     return (running_loss.item()/len(train_loader.dataset), correctos.item()/len(train_loader.dataset))
 
-def test(modelo, epoca, dispositivo, test_loader):
+def test(modelo, epoca, dispositivo, test_loader, criterion):
     """
     """
     modelo.eval()
@@ -123,7 +126,8 @@ def test(modelo, epoca, dispositivo, test_loader):
             etiquetas = etiquetas.to(dispositivo)
 
             output = modelo(data)
-            loss = F.nll_loss(output, etiquetas)
+            loss = criterion(output, etiquetas)
+
             running_loss = running_loss + loss
 
             # obtener precision
@@ -161,7 +165,9 @@ def main():
 
 
     # crear red y parametros
-    model = LeNet().to(device)
+    #model = LeNet().to(device)
+    model = MNISTResNet().to(device)
+
     optimizer = optim.SGD(model.parameters(), lr=learning_rate, momentum = momentum)
     summary(model, input_size=(1, img_size, img_size), batch_size=batch_size_train, device='cuda')
 
@@ -169,12 +175,13 @@ def main():
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
     # load previously trained model
-    resume = False
+    resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+weight_file+"001.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+weight_file+"002.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
-        lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
+        lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
+        print("Loaded {}".format(model_save_path+weight_file+"002.pt")) 
 
 
 
@@ -205,18 +212,19 @@ def main():
         train_loader = torch.utils.data.DataLoader( msd_train, batch_size = batch_size_train, shuffle = True)
         test_loader = torch.utils.data.DataLoader( msd_test, batch_size = batch_size_test, shuffle = False)
 
-        # mostrar algunos numeros
-        #desplegar_muestras(test_loader)
-
+        # loss function
+        #loss = F.nll_loss(output, etiquetas)
+        loss = nn.CrossEntropyLoss()
+        
         # train
         train_history = []
         test_history = []
         for epoch in range(num_epochs):
 
             # one train pass, one tests pass
-            train_params = train(model, device, train_loader, epoch, optimizer)
+            train_params = train(model, device, train_loader, epoch, optimizer, loss)
             lr_scheduler.step()  # refrescar taza de aprendizaje
-            test_params = test(model, epoch, device, test_loader)
+            test_params = test(model, epoch, device, test_loader, loss)
             train_history.append(train_params)
             test_history.append(test_params)
 
@@ -259,5 +267,6 @@ def main():
         #evaluation
         pass
 
-if __name__ == '__main__':    
+if __name__ == '__main__': 
+    #summary(model, input_size=(1, img_size, img_size), batch_size=batch_size_train, device='cpu')
     main()

@@ -20,3 +20,5 @@ test.tar.gz
 train.tar.gz
 multidigit_models/
 election_count_helper/
+weights/
+datasets/
