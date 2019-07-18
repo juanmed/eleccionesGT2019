@@ -8,8 +8,6 @@ import cv2
 
 import torch
 import torchvision
-from torchvision.models.detection.faster_rcnn import FasterRCNN, FastRCNNPredictor
-from torchvision.models.detection.rpn import AnchorGenerator
 from torchvision import transforms
 from torchsummary import summary
 
@@ -20,7 +18,11 @@ import transforms as T
 from coco_utils import get_coco_api_from_dataset
 from coco_eval import CocoEvaluator
 
-model_save_path = "./multidigit_models/"
+from models.faster_rcnn_models import get_mobilenet_model
+
+
+model_save_path = "./weights/"
+weight_file = "multidigit_mn_"
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
@@ -45,6 +47,7 @@ save_model = True
 save_frequency = 5
 step_size = 80
 gamma = 0.5
+evaluate_freq = 50
 
 batch_size_train = 4
 batch_size_test = 8
@@ -53,23 +56,6 @@ batch_size_val = 8
 img_width = 1634
 img_height = 2182
 
-def get_mobilenet_model(num_classes):
-    """
-        Seguir ejemplo en https://github.com/pytorch/vision/blob/master/torchvision/models/detection/faster_rcnn.py
-    """
-
-    backbone = torchvision.models.mobilenet_v2(pretrained=True).features
-    backbone.out_channels = 1280
-
-    anchor_generator = AnchorGenerator(sizes=((32, 64, 128),), aspect_ratios=((0.5, 1.0, 2.0),))
-    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=[0], output_size=7,sampling_ratio=2)
-
-    # stats for test images
-    #Original Width avg 172.58  std_dev 122.58 min 31 max 1083
-    #Original Height avg 105.00 std_dev 52.75 min 13 max 516
-
-    model = FasterRCNN(backbone, num_classes=num_classes, min_size=100, max_size=300, rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
-    return model
 
 def get_transform():
     transforms = []
@@ -240,13 +226,13 @@ def main():
 
     resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+"multidigit_nn_190.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+weight_file+"190.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
 
-    do_learn = False
+    do_learn = True
     if(do_learn):
         # load datasets
         trans = transforms.Compose([transforms.ToTensor()]) #transforms.Resize((img_height, img_width)),
@@ -259,9 +245,14 @@ def main():
 
         for epoch in range(num_epochs):
 
+            t1 = time.time()
             train_one_epoch(model, optimizer, train_loader, device, epoch, print_freq=1)
+            t2 = time.time()
+            print("Epoch time: {:.4f}".format(t2-t1))
             lr_scheduler.step()  # refrescar taza de aprendizaje
-            evaluate(model, test_loader, device=device)
+
+            if ((epoch % evaluate_freq) == 0):
+                evaluate(model, test_loader, device=device)
 
             if save_model and ((epoch % save_frequency) == 0) and epoch != 0 :
                 
@@ -269,9 +260,9 @@ def main():
                                       'optimizer': optimizer.state_dict(),
                                       'lr_scheduler': lr_scheduler.state_dict()},
                                       #'args':
-                                      os.path.join(model_save_path, 'multidigit_nn_{:03}.pt'.format(epoch)))
+                                      os.path.join(model_save_path, weight_file+"{:03}.pt".format(epoch)))
 
-                print(">> Saving model: {}".format(model_save_path+'multidigit_nn_{:03}.pt'.format(epoch)))
+                print(">> Saving model: {}".format(model_save_path+weight_file+"{:03}.pt".format(epoch)))
             else:
                 # not moment to save
                 pass
@@ -282,10 +273,6 @@ def main():
         val_dataset = ActasLoader(root = './svhn_dataset/', split='test', transform = trans)        
         val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
         
-        #checkpoint = torch.load(model_save_path+"multidigit_nn_010.pt", map_location='cpu')
-        #model.load_state_dict(checkpoint['model'])
-        #optimizer.load_state_dict(checkpoint['optimizer'])
-        #lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
         model.eval()
 
         # evaluate batch

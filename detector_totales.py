@@ -20,7 +20,11 @@ import transforms as T
 from coco_utils import get_coco_api_from_dataset
 from coco_eval import CocoEvaluator
 
-model_save_path = "./detector_total_models/"
+from models.faster_rcnn_models import get_mobilenet_model
+
+
+model_save_path = "./weights/"
+weight_file = "detector_totales_mn_"
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
@@ -57,6 +61,7 @@ save_model = True
 save_frequency = 500
 step_size = 1000
 gamma = 0.5
+evaluate_freq = 50
 
 batch_size_train = 16
 batch_size_test = 1
@@ -65,19 +70,7 @@ batch_size_val = 1
 img_width = 1634
 img_height = 2182
 
-def get_mobilenet_model(num_classes):
-    """
-        Seguir ejemplo en https://github.com/pytorch/vision/blob/master/torchvision/models/detection/faster_rcnn.py
-    """
 
-    backbone = torchvision.models.mobilenet_v2(pretrained=True).features
-    backbone.out_channels = 1280
-
-    anchor_generator = AnchorGenerator(sizes=((32, 128, 512),), aspect_ratios=((0.5, 1.0, 2.0),))
-    roi_pooler = torchvision.ops.MultiScaleRoIAlign(featmap_names=[0], output_size=7,sampling_ratio=2)
-
-    model = FasterRCNN(backbone, num_classes=num_classes, min_size=800, max_size=800, rpn_anchor_generator=anchor_generator, box_roi_pool=roi_pooler)
-    return model
 
 def get_transform():
     transforms = []
@@ -222,13 +215,9 @@ def main():
     print(" >> Found {} device".format(device))
 
     # crear red
-    #model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True)    
     model = get_mobilenet_model(num_classes)
-    #in_features = model.roi_heads.box_predictor.cls_score.in_features
-    #model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
     model = model.to(device)
     print(model)
-    #summary(model, input_size=(1, img_width, img_height), batch_size=batch_size_train, device='cuda')
 
     # crear optimizador
     params = [p for p in model.parameters() if p.requires_grad]
@@ -239,12 +228,12 @@ def main():
 
     resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+"detector_totales_mn_12000.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+weight_file+"12000.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
-    do_learn = False
+    do_learn = True
     if(do_learn):
         # load datasets
         #trans = transforms.Compose([ transforms.Resize((img_height, img_width)), transforms.ToTensor()])
@@ -260,10 +249,10 @@ def main():
             t1 = time.time()
             train_one_epoch(model, optimizer, train_loader, device, epoch, print_freq=1)
             t2 = time.time()
-            print("Epoch time: {:.2f}".format(t2 - t1))
+            print("Epoch time: {:.4f}".format(t2 - t1))
             lr_scheduler.step()  # refrescar taza de aprendizaje
             
-            if ((epoch % 50) == 0):
+            if ((epoch % evaluate_freq) == 0):
                 evaluate(model, test_loader, device=device)
 
             if save_model and ((epoch % save_frequency) == 0) and epoch != 0 :
@@ -272,9 +261,9 @@ def main():
                                       'optimizer': optimizer.state_dict(),
                                       'lr_scheduler': lr_scheduler.state_dict()},
                                       #'args':
-                                      os.path.join(model_save_path, 'detector_totales_mn_{:03}.pt'.format(epoch)))
+                                      os.path.join(model_save_path, weight_file+'{:03}.pt'.format(epoch)))
 
-                print(">> Saving model: {}".format(model_save_path+'detector_totales_mn_{:03}.pt'.format(epoch)))
+                print(">> Saving model: {}".format(model_save_path+weight_file+'{:03}.pt'.format(epoch)))
             else:
                 # not moment to save
                 pass
@@ -285,10 +274,6 @@ def main():
         val_dataset = ActasLoader(root = './actas_dataset/', split='test', transform = trans)        
         val_loader = torch.utils.data.DataLoader( val_dataset, batch_size = batch_size_val, shuffle = False, collate_fn=utils.collate_fn, num_workers=4)
         
-        #checkpoint = torch.load(model_save_path+"detector_totales_nn_2000.pt", map_location='cpu')
-        #model.load_state_dict(checkpoint['model'])
-        #optimizer.load_state_dict(checkpoint['optimizer'])
-        #lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
         model.eval()
 
         # evaluate batch
