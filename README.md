@@ -45,6 +45,8 @@ Es necesario installar tesseract (usando el código fuente) y pytesseract. En [e
 
 * Si hubiese algún problema con en la instalación de pytesseract, seguir la [información oficial](https://github.com/tesseract-ocr/tesseract/wiki).
 
+* Si utilizas CUDA10, por favor ver las instrucciones de instalación de Pytorch y torchvision más abajo
+
 e) Descargar e instala pycocotools
 
 ```bash
@@ -78,6 +80,32 @@ PENDIENTE!
 
 
 
+## Instalar Pytorch y Torchvision con CUDA10
+
+Primero desinstalar pytorch y torchvision:
+
+```python
+pip uninstall torch
+pip uninstall torchvision
+```
+
+Instalar de nuevo utilizando
+
+```python
+pip install https://download.pytorch.org/whl/cu100/torch-1.1.0-cp36-cp36m-linux_x86_64.whl
+pip install https://download.pytorch.org/whl/cpu/torchvision-0.3.0-cp36-cp36m-linux_x86_64.whl
+```
+
+Verificar utilizando
+
+```bash
+>>> import torch
+>>> print(torch.__version__)
+1.1.0
+>>> print(torch.version.cuda)
+10.0.130
+>>> 
+```
 
 
 ## Referencias

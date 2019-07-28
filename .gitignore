@@ -22,3 +22,6 @@ multidigit_models/
 election_count_helper/
 weights/
 datasets/
+OMRChecker/
+document-scanner/
+*.png

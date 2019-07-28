@@ -13,5 +13,9 @@ pytesseract
 jupyter
 sklearn
 scikit-image
-keras
-tensorflow-gpu
+#keras
+#tensorflow-gpu
+fuzzywuzzy
+requests
+python-Levenshtein
+imutils
