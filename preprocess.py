@@ -366,6 +366,7 @@ def resizeRect(rect, scale, imgshape):
 
 def predictPytorchModel(roi, model, img_size):
     """
+    Hacer prediccion utilizando MNISTResNet
     """
     from torchvision import transforms
     # verificar si hay GPU
@@ -389,10 +390,13 @@ def predictPytorchModel(roi, model, img_size):
         prediction = model(roi)
         #print(prediction)
         val = np.argmax(prediction.to('cpu').numpy())
-    return val
+
+    roi = roi.squeeze(0).permute(1,2,0).to('cpu').numpy()
+    return val, roi
 
 def predictKerasModel(roi, model, img_size):
     """
+    Hacer prediccion utilizando WideResNet28_10
     """
     #Resize the image
     roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
@@ -440,7 +444,6 @@ def loadPytorchModel():
     Load the digit recognition model
     """
     import torch
-
     model = MNISTResNet()
 
     # load weights and state
@@ -458,6 +461,43 @@ def loadKerasModel():
     model.load_weights(model_save_path + model_name + '.h5')
     print("Loaded {}".format(model_save_path + model_name + '.h5'))
     return model
+
+def processActa(img):
+    """
+    """
+    image, success, scale = FindResize(img.copy(), dw, dh)
+    d = OCR(image.copy())
+
+    coords, success = GetBoundingBox(image, d)
+    coords = coords*(1.0/scale)
+    (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+
+    totales_crop = img[y:y+h, x:x+w]
+    gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray.copy(), 50, 200, 5)
+    #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
+    rects = ExtractRectangles(edges)
+    (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects)
+    cleaned_rects = removeChildrenRects(cleaned_rects)
+
+    ntotales=7
+    ndigitos=3
+    if (len(cleaned_rects_vcenter)>ntotales):
+        totals_mean,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
+    else:
+        print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
+        return (True,-3)
+    
+    if (len(cleaned_rects_vcenter)>ntotales):
+        digit_lab,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
+    else:
+        print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
+        return (True,-4)
+
+    cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
+
+    totales, img_n = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
+    return totales, img_n
 
 if __name__ == '__main__':
 
@@ -479,50 +519,10 @@ if __name__ == '__main__':
 
         print("Imagen {}: {}".format(i,file))
         original = cv2.imread(actas_dir + file)
-        image, success, scale = FindResize(original.copy(), dw, dh)
-        d = OCR(image.copy())
-        coords, success = GetBoundingBox(image, d)
-        coords = coords*(1.0/scale)
-        (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
 
-        totales_crop = original[y:y+h, x:x+w]
-        gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
-        edges = cv2.Canny(gray.copy(), 50, 200, 5)
-        #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
-        rects = ExtractRectangles(edges)
-        (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects)
-        cleaned_rects = removeChildrenRects(cleaned_rects)
-        
-        ntotales=7
-        ndigitos=3
-        if (len(cleaned_rects_vcenter)>ntotales):
-            totals_mean,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
-        else:
-            print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
-            #return (True,-3)
-            continue
-        
-        if (len(cleaned_rects_vcenter)>ntotales):
-            digit_lab,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
-        else:
-            print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
-            #return (True,-4)
-            continue
-
-        cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
-
-        totales, img_n = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
-        print(">>  Totales: {}".format(totales))
-           
-            
-        #for i,rect in enumerate(cleaned_rects):
-        #    dx,dy,dw,dh = rect
-        #    totales_crop = cv2.rectangle(totales_crop,(dx,dy),(dx+dw,dy+dh),(0,255,0),2)
-        #    #totales_crop = cv2.putText(totales_crop,str(digit_lbl[i]), (dx,dy), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
-        #    #totales_crop = cv2.putText(totales_crop,str(totals_lbl[i]), (10,dy), cv2.FONT_HERSHEY_SIMPLEX, 2,(255,0,0),2,cv2.LINE_AA)
-        
-
-        cv2.imshow('fig',cv2.resize(img_n, None, fx=1.0, fy = 1.0))
+        totales, img_crop = processActa(original.copy())
+        print (totales)
+        cv2.imshow('fig',cv2.resize(img_crop, None, fx=1.0, fy = 1.0))
         cv2.waitKey()
         cv2.destroyAllWindows()        
         
