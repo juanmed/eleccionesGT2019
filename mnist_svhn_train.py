@@ -18,7 +18,7 @@ import utils
 
 
 model_save_path = "./weights/"
-weight_file = "mnist_svhn_resnet"
+weight_file = "mnist_svhn_resnet_rand_"
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
@@ -34,8 +34,8 @@ gamma = 0.5
 img_size = 32
 
 
-batch_size_train = 128
-batch_size_test = 128
+batch_size_train = 4
+batch_size_test = 4
 batch_size_val = 1
 
 img_width = 1634
@@ -78,7 +78,7 @@ class MNIST_SVHN_Dataset(torch.utils.data.Dataset):
         return img, target
 
     def __len__(self):
-        return len(self.mnist_data) + len(self.svhn_data)
+        return len(self.mnist_data) #+ len(self.svhn_data)
 
 def train(modelo, dispositivo, train_loader, epoca, optimizador, criterion):
     """
@@ -175,7 +175,7 @@ def main():
     lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
 
     # load previously trained model
-    resume = True
+    resume = False
     if(resume):
         checkpoint = torch.load(model_save_path+weight_file+"200.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
@@ -185,13 +185,14 @@ def main():
 
 
 
-    do_learn = False
+    do_learn = True
     if do_learn:
         # training
         mnist_transform = transforms.Compose([
             #transforms.ToPILImage(),
             transforms.Resize((img_size, img_size)),
             transforms.Grayscale(num_output_channels=1),
+            transforms.RandomAffine(degrees = 20, translate=(0.2,0.2)),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,),(0.3081,)),
             ##transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -271,6 +272,7 @@ def main():
             #transforms.ToPILImage(),
             transforms.Resize((img_size, img_size)),
             transforms.Grayscale(num_output_channels=1),
+            transforms.RandomAffine(degrees = 20, translate=(0.2,0.2)),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,),(0.3081,)),
             ##transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))

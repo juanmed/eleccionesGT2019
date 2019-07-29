@@ -3,6 +3,7 @@ import sys
 import argparse
 import time
 import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import cv2
 import imutils
@@ -14,12 +15,8 @@ from fuzzywuzzy import fuzz
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
-
-
+#import torch
 import params
-#from models.mnist_resnet import MNISTResNet
-from models.wide_resnet_28_10 import WideResNet28_10
-from utils2 import load_mnist
 
 
 model_save_path = "./weights/"
@@ -155,7 +152,93 @@ def GetKeywordIndex(d, keywords):
             words.append(matching_word)
     return indices, words
 
-def GetBoundingBox(img, d):
+def GetBoundingBoxMesa(d):
+    """
+    """
+    keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']
+
+    # default values
+    x = 350#225
+    y = 650
+    w = 100
+    h = 100 
+
+    t1_x_offset = 70
+    t1_y_offset = 60
+    t2_x_offset = 200 
+    t2_y_offset = -270
+
+    coord = []
+
+    idx, words = GetKeywordIndex(d, keywords)
+    success = False
+    if len(idx) == 2:
+        t1_x = d['left'][idx[0]]
+        t1_y = d['top'][idx[0]]
+        t1_w = d['width'][idx[0]]
+        t1_h = d['height'][idx[0]]
+
+        p1_y = t1_y + t1_y_offset #int(params.t1_p1_h_offset * t1_h / params.t1_h) + t1_y
+        p1_x = (t1_x + t1_x_offset) if (t1_x + t1_x_offset) > 0 else 0 #int(params.t1_p1_w_offset * t1_w / params.t1_w) + t1_x
+
+        coord.append([p1_x, p1_y, w, h])
+
+        t2_x = d['left'][idx[1]]
+        t2_y = d['top'][idx[1]]
+        t2_w = d['width'][idx[1]]
+        t2_h = d['height'][idx[1]]
+
+        p1_y = t2_y + t2_y_offset #int(params.t2_p1_h_offset * t2_h / params.t2_h) + t2_y
+        p1_x = t2_x + t2_x_offset #int(params.t2_p1_w_offset * t2_w / params.t2_w) + t2_x
+
+        coord.append([p1_x, p1_y, w, h])
+        success = True
+        #return coord, True
+
+    elif len(idx) == 1:
+        
+        word = d['text'][idx[0]]
+        for i, keyword in enumerate(keywords):
+            if( word[0] == keyword[0]):
+                break
+
+        t_x = d['left'][idx[0]]
+        t_y = d['top'][idx[0]]
+        t_w = d['width'][idx[0]]
+        t_h = d['height'][idx[0]]
+
+        if i == 0:
+
+            p1_y = t_y + t1_y_offset #int(params.t1_p1_h_offset * t_h / params.t1_h) + t_y
+            p1_x = (t_x + t1_x_offset) if (t_x + t1_x_offset) > 0 else 0 #int(params.t1_p1_w_offset * t_w / params.t1_w) + t_x
+            p1_w = int(params.bbox_w * t_w / params.t1_w )
+            p1_h = int(params.bbox_h * t_h / params.t1_h) 
+            coord.append([p1_x, p1_y, w, h])
+
+        elif i == 1 :
+
+            p1_y = t_y + t2_y_offset #int(params.t2_p1_h_offset * t_h / params.t2_h) + t_y
+            p1_x = t_x + t2_x_offset #int(params.t2_p1_w_offset * t_w / params.t2_w) + t_x
+            p1_w = int(params.bbox_w * t_w / params.t2_w )
+            p1_h = int(params.bbox_h * t_h / params.t2_h) 
+            coord.append([p1_x, p1_y, w, h])
+
+        else:
+            print("Imposible keyword")
+
+        success = True
+        #return coord, True
+
+    else:
+        coord.append([x, y, w, h])
+        success = False
+        #return coord, False
+
+    coord = np.array(coord).reshape(-1,4)
+    coord = np.mean(coord, axis = 0)
+    return coord, success
+
+def GetBoundingBoxTotales(d):
     """
     """
     keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']# , 'PARTIDOA', 'PARTIDOB']
@@ -163,12 +246,12 @@ def GetBoundingBox(img, d):
     # default values
     x = 350#225
     y = 650
-    w = 150
+    w = 200
     h = 550 
 
-    t1_x_offset = 50
+    t1_x_offset = 25
     t1_y_offset = 470
-    t2_x_offset = 180 
+    t2_x_offset = 205 
     t2_y_offset = 125
 
     coord = []
@@ -238,7 +321,7 @@ def GetBoundingBox(img, d):
 
     else:
         coord.append([x, y, w, h])
-        success = True
+        success = False
         #return coord, False
 
     coord = np.array(coord).reshape(-1,4)
@@ -288,7 +371,7 @@ def removeChildrenRects(rects):
 
     return only_external
 
-def CleanRectangles(rects, h_min=50, w_min=50, h_max = 75, w_max = 75):
+def CleanRectangles(rects, h_min=35, w_min=25, h_max = 75, w_max = 75):
     """
     Eliminar rectangulos que son muy pequenos para ser digitos.
     Los valores por defecto: h_min=25, w_min=25, h_max = 75, w_max = 75
@@ -309,7 +392,7 @@ def CleanRectangles(rects, h_min=50, w_min=50, h_max = 75, w_max = 75):
             cleaned_rects_hcenter.append(rect[0] + rect[2]//2)
             widths.append(rect[2])
             heights.append(rect[3])
-
+    #print(widths)
     mean_width = int(np.mean(widths))
     mean_heigth = int(np.mean(heights))
     cleaned_rects_vcenter=np.array(cleaned_rects_vcenter).reshape(-1,1)
@@ -371,17 +454,20 @@ def predictPytorchModel(roi, model, img_size):
     from torchvision import transforms
     # verificar si hay GPU
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(" >> Found {} device".format(device))
+    #print(" >> Found {} device".format(device))
 
     model = model.to(device)
     model.eval()
 
+    roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    ret, roi = cv2.threshold(roi, 90, 255, cv2.THRESH_BINARY_INV)
+
     svhn_transform = transforms.Compose([
         transforms.ToPILImage(),
         transforms.Resize((img_size, img_size)),
-        transforms.Grayscale(num_output_channels=1),
+        #transforms.Grayscale(num_output_channels=1),
         transforms.ToTensor(),
-        transforms.Normalize((0.5,),(0.5,))
+        transforms.Normalize((0.1307,),(0.3081,))
     ])
     with torch.no_grad():
 
@@ -400,13 +486,15 @@ def predictKerasModel(roi, model, img_size):
     """
     #Resize the image
     roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    ret, roi = cv2.threshold(roi, 90, 255, cv2.THRESH_BINARY_INV)
     roi = cv2.resize(roi, (img_size, img_size), interpolation=cv2.INTER_AREA)
-    roi = cv2.dilate(roi, (3, 3))
-    roi = cv2.erode(roi, (6, 6))
+    #roi = cv2.dilate(roi, (3, 3))
+    #roi = cv2.erode(roi, (6, 6))
     roi = roi / 255
 
     ext_digit = roi.reshape(1,28,28,1)
     prediction= model.predict(ext_digit, verbose = 0)
+    print(prediction)
     val = np.argmax(prediction[0])
     return val, roi
 
@@ -428,22 +516,24 @@ def GetNumericTotals(img, rects, total_lbl, digit_lbl, model):
         x,y,w,h = resizeRect(rect, 1.2, img.shape)
         roi = img[y:y+h, x:x+h]
 
-        #val = predictPytorchModel(roi,model, img_size)
-        val,roi = predictKerasModel(roi.copy(), model, img_size)
+        #val, roi = predictPytorchModel(roi,model, img_size)
+        val, roi = predictKerasModel(roi.copy(), model, img_size)
 
         totals[total_lbl[i]] += val*(10**digit_lbl[i])
+        img_n = cv2.rectangle(img_n,(x, y),(x + w, y + h),(0, 255, 0),3)
         img_n = cv2.putText(img_n, str(val), (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
         roi =  roi.reshape(img_size,img_size,-1) #cv2.resize(roi,(img_size,img_size))
         a = np.concatenate((a,roi), axis = 0)
 
-    img_n = a
+    #img_n = a
     return totals, img_n
 
 def loadPytorchModel():
     """
-    Load the digit recognition model
+    Cargar modelo hecho en Pytorch
     """
     import torch
+    from models.mnist_resnet import MNISTResNet
     model = MNISTResNet()
 
     # load weights and state
@@ -454,7 +544,11 @@ def loadPytorchModel():
 
 def loadKerasModel():
     """
+    Cargar un modelo hecho con Keras
     """
+    from utils2 import load_mnist
+    from models.wide_resnet_28_10 import WideResNet28_10
+
     model_name = "WideResNet28_10"
     model=WideResNet28_10()
     model.compile()
@@ -462,17 +556,25 @@ def loadKerasModel():
     print("Loaded {}".format(model_save_path + model_name + '.h5'))
     return model
 
-def processActa(img):
+def processActa(img , model):
     """
     """
+    problem = False
     image, success, scale = FindResize(img.copy(), dw, dh)
     d = OCR(image.copy())
 
-    coords, success = GetBoundingBox(image, d)
+    coords, success = GetBoundingBoxTotales(d)
     coords = coords*(1.0/scale)
-    (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+    (tx, ty, tw, th) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
 
-    totales_crop = img[y:y+h, x:x+w]
+    coords, success = GetBoundingBoxMesa(d)
+    coords = coords*(1.0/scale)
+    (mx, my, mw, mh) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+
+    totales_crop = img[ty:ty+th, tx:tx+tw]
+    mesa_crop = img[my:my+mh, mx:mx+mw]
+
+    
     gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray.copy(), 50, 200, 5)
     #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
@@ -483,46 +585,72 @@ def processActa(img):
     ntotales=7
     ndigitos=3
     if (len(cleaned_rects_vcenter)>ntotales):
-        totals_mean,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
+        totals_lbl,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
     else:
         print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
-        return (True,-3)
+        return 0,0,-1
     
     if (len(cleaned_rects_vcenter)>ntotales):
-        digit_lab,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
+        digit_lbl,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
     else:
         print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
-        return (True,-4)
+        return 0,0,-2
 
-    cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
-
+    #cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
     totales, img_n = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
-    return totales, img_n
+    
+    return totales, img_n, problem
 
 if __name__ == '__main__':
 
     args = build_arg_parser()
-    actas_dir = './datasets/2davuelta/sim/'
+    actas_dir = './datasets/2davuelta/cuadro/'
     actas_filenames = os.listdir(actas_dir)[:10]
 
     #model = loadPytorchModel()
     model = loadKerasModel()
 
-    # buenas keywords siglas, ACTAFINALCIERREYESCRUTINIOS, PRESIDENTEYVICEPRESIDENTE
-    keywords = ['OBSERVACIONES', 'PRESIDENTEYVICEPRESIDENTE']
-    k1 = []
-    k2 = []
-    both = 0
-    one = 0
-    none  = 0
     for i, file in enumerate(actas_filenames):
 
         print("Imagen {}: {}".format(i,file))
         original = cv2.imread(actas_dir + file)
 
-        totales, img_crop = processActa(original.copy())
-        print (totales)
-        cv2.imshow('fig',cv2.resize(img_crop, None, fx=1.0, fy = 1.0))
-        cv2.waitKey()
-        cv2.destroyAllWindows()        
+        totales, img_crop, problem = processActa(original.copy(), model)
+
+        if problem < 0:
+            if (problem == -1):
+                print(" >> No se reconocion la cantidad esperada de totales")
+            elif(problem == -2):
+                print(" >> No se encontro la cantidad esperada de digitos")
+            else:
+                print("No existe este codigo de problem.")
+        else:
+            print (totales)
+            cv2.imshow('fig',cv2.resize(img_crop, None, fx=0.75, fy = 0.75))
+            cv2.waitKey()
+            cv2.destroyAllWindows()        
         
+
+"""
+
+    for j, coor in enumerate(coords):
+        (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
+        if success:
+            c1 = np.random.randint(0,256)
+            c2 = np.random.randint(0,256)
+            c3 = np.random.randint(0,256)
+            img = cv2.rectangle(img,(x, y),(x + w, y + h),(c1, c2, c3),3)
+            img = cv2.putText(img,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
+        else:
+            img = cv2.rectangle(img,(x,y),(x + w, y + h),(0,0,255),3)
+
+
+
+
+    bbox = np.mean(coords, axis = 0)
+    (x, y, w, h) = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+"""
+
+# TODO
+# Confude 7 con 1, espacio vacio con 1, 
