@@ -177,7 +177,7 @@ def main():
     # load previously trained model
     resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+weight_file+"002.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+weight_file+"200.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler'])
@@ -185,7 +185,7 @@ def main():
 
 
 
-    do_learn = True
+    do_learn = False
     if do_learn:
         # training
         mnist_transform = transforms.Compose([
@@ -265,6 +265,27 @@ def main():
 
     else:
         #evaluation
+
+        # training
+        mnist_transform = transforms.Compose([
+            #transforms.ToPILImage(),
+            transforms.Resize((img_size, img_size)),
+            transforms.Grayscale(num_output_channels=1),
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,),(0.3081,)),
+            ##transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
+        ])
+            
+        svhn_transform = transforms.Compose([
+            #transforms.ToPILImage(),
+            transforms.Grayscale(num_output_channels=1),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,),(0.5,))
+        ])        
+        msd_test = MNIST_SVHN_Dataset(split = "test", mnist_transform = mnist_transform, svhn_transform = svhn_transform)
+        test_loader = torch.utils.data.DataLoader( msd_test, batch_size = batch_size_test, shuffle = True)
+        loss = nn.CrossEntropyLoss()
+        test_params = test(model, "NaN", device, test_loader, loss)
         pass
 
 if __name__ == '__main__': 

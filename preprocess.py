@@ -8,14 +8,22 @@ import cv2
 import imutils
 from imutils import perspective
 import numpy as np
-
 import pytesseract
 from pytesseract import Output
 from fuzzywuzzy import fuzz 
-
+from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
+
+
 import params
+#from models.mnist_resnet import MNISTResNet
+from models.wide_resnet_28_10 import WideResNet28_10
+from utils2 import load_mnist
+
+
+model_save_path = "./weights/"
+weight_file = "mnist_svhn_resnet"
 
 
 max_size = 1500
@@ -81,12 +89,12 @@ def FindResize(img, w, h):
         success = True
 
     #return cv2.resize(img, (dw, dh), interpolation = cv2.INTER_AREA), success 
-    return img, success
+    return img, success, scale
 
 def FuzzyMatch(word,matching_words):
     """
     Buscar el mejor matching de 'word' en una lista de palabras 'matching_words'
-    De https://github.com/leaguilar/election_count_helper
+    Adaptado de https://github.com/leaguilar/election_count_helper
     """
     ratio  = 0
     for i, mw in enumerate(matching_words): 
@@ -103,7 +111,7 @@ def FuzzyMatch(word,matching_words):
 def OCR(img):   
     """
     Hacer OCR en la imagen.
-    De https://github.com/leaguilar/election_count_helper
+    Adaptado de https://github.com/leaguilar/election_count_helper
     """
     d = pytesseract.image_to_data(img, output_type=Output.DICT, config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
     return d
@@ -111,7 +119,7 @@ def OCR(img):
 def GetIndex(d,word,first=True):
     """
     Obtener indice de 'word' en el diccionario 'd'
-    De https://github.com/leaguilar/election_count_helper
+    Adaptado de https://github.com/leaguilar/election_count_helper
     """
     if word in d['text']:
         if first:
@@ -125,7 +133,7 @@ def GetIndex(d,word,first=True):
 def DrawBoxes(img,d):
     """
     Helper function to draw boxes in a tesseract OCR dictionary
-    De https://github.com/leaguilar/election_count_helper
+    Adaptado de https://github.com/leaguilar/election_count_helper
     """
     img2=img.copy()
     n_boxes = len(d['level'])
@@ -166,6 +174,7 @@ def GetBoundingBox(img, d):
     coord = []
 
     idx, words = GetKeywordIndex(d, keywords)
+    success = False
     if len(idx) == 2:
         t1_x = d['left'][idx[0]]
         t1_y = d['top'][idx[0]]
@@ -190,8 +199,8 @@ def GetBoundingBox(img, d):
         p1_h = int(params.bbox_h * t2_h / params.t2_h )
 
         coord.append([p1_x, p1_y, w, h])
-
-        return coord, True
+        success = True
+        #return coord, True
 
     elif len(idx) == 1:
         
@@ -224,36 +233,240 @@ def GetBoundingBox(img, d):
         else:
             print("Imposible keyword")
 
-        return coord, True
+        success = True
+        #return coord, True
 
     else:
         coord.append([x, y, w, h])
-        return coord, False
+        success = True
+        #return coord, False
 
+    coord = np.array(coord).reshape(-1,4)
+    coord = np.mean(coord, axis = 0)
+    return coord, success
         
+def ExtractRectangles(image):
+    """
+    Obtener rectangular que encierran a cada digito
+    Adaptado de https://github.com/leaguilar/election_count_helper
+    """
+    # Find contours in the image
+    ctrs, hier = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    # Get only parent rectangles that contains each contour
+    rects = [cv2.boundingRect(ctr) for ctr in ctrs]
+    return rects
 
+def removeChildrenRects(rects):
+    """
+    Remover rectangulos que estan dentro de un rectangulo mas grande y dejar
+    solo los mas externos
+    """
+    only_external = []
+    is_external = []
+    for i in range(len(rects)):
+        cx, cy, cw, ch = rects[i]
+        has_parent = False
+        for j in range(len(rects)):
+            if (j != i):
+                x,y,w,h = rects[j]
+                if ( (cx > x) and (cy > y) and ((cx + cw) < (x+w)) and ((cy + ch) < (y + h))):
+                    has_parent = True
+                    break
+                else:
+                    continue
+            else:
+                continue
+
+        if(has_parent):
+            is_external.append(False)
+        else:
+            is_external.append(True)
+
+    for i in range(len(rects)):
+        if(is_external[i]):
+            only_external.append(rects[i])
+
+    return only_external
+
+def CleanRectangles(rects, h_min=50, w_min=50, h_max = 75, w_max = 75):
+    """
+    Eliminar rectangulos que son muy pequenos para ser digitos.
+    Los valores por defecto: h_min=25, w_min=25, h_max = 75, w_max = 75
+    parecen funcionar bien.
+    Adaptado de https://github.com/leaguilar/election_count_helper
+    """
+    cleaned_rects=[]
+    cleaned_rects_vcenter=[]
+    cleaned_rects_hcenter=[]
+    widths = []
+    heights = []
+
+    for j, rect in enumerate(rects):
+        # Draw the rectangles
+        if (( h_min <= rect[3] <= h_max) and ( w_min <= rect[2] <= w_max)):
+            cleaned_rects.append(rect)
+            cleaned_rects_vcenter.append(rect[1] + rect[3]//2)
+            cleaned_rects_hcenter.append(rect[0] + rect[2]//2)
+            widths.append(rect[2])
+            heights.append(rect[3])
+
+    mean_width = int(np.mean(widths))
+    mean_heigth = int(np.mean(heights))
+    cleaned_rects_vcenter=np.array(cleaned_rects_vcenter).reshape(-1,1)
+    cleaned_rects_hcenter=np.array(cleaned_rects_hcenter).reshape(-1,1)
+    return (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, mean_width, mean_heigth)
+
+def GetLabels(data,nclust):
+    """
+    Agrupar centroides de cada rectangulo
+    Adaptado de https://github.com/leaguilar/election_count_helper
+    """
+    labels=[]  
+    kmeans = KMeans(n_clusters=nclust, random_state=0).fit(data)
+    means=kmeans.cluster_centers_.mean(axis=1)
+    idx = np.argsort(means)
+    lut = np.zeros_like(idx)
+    lut[idx] = np.arange(nclust)
+    for i in range(len(kmeans.labels_)):
+        labels.append(lut[kmeans.labels_[i]])
+    return (labels,np.sort(means))
+
+def GetStandardRects(w,h, x_ps, y_ps):
+    """
+    Definir una ubicacion 'standard' de los digitos en base a los
+    rectangulos detectados. Esto permite colocar rectangulos incluso
+    en digitos que no pudieron ser detectados.
+    """
+    standard_rects = []
+    totals_lbl = []
+    digit_lbl = []
+    for k, y_pos  in enumerate(np.sort(y_ps)):
+        for j, x_pos in enumerate(np.flip(np.sort(x_ps))):
+            x = int(x_pos - w//2)
+            y = int(y_pos - h//2)
+            standard_rects.append((x, y, w, h ))
+            totals_lbl.append(k)
+            digit_lbl.append(j)
+
+    return standard_rects, totals_lbl, digit_lbl
+
+def resizeRect(rect, scale, imgshape):
+    """
+    """
+    h, w, channels = imgshape
+    # Make the rectangular region around the digit
+    leng = int(rect[3] * scale)
+    y = int(rect[1] + rect[3] // 2 - leng // 2)
+    x = int(rect[0] + rect[2] // 2 - leng // 2)
+    if y < 0:
+        y=0
+    if x < 0:
+        x=0
+    return (x, y, leng, leng)
+
+def predictPytorchModel(roi, model, img_size):
+    """
+    """
+    from torchvision import transforms
+    # verificar si hay GPU
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print(" >> Found {} device".format(device))
+
+    model = model.to(device)
+    model.eval()
+
+    svhn_transform = transforms.Compose([
+        transforms.ToPILImage(),
+        transforms.Resize((img_size, img_size)),
+        transforms.Grayscale(num_output_channels=1),
+        transforms.ToTensor(),
+        transforms.Normalize((0.5,),(0.5,))
+    ])
+    with torch.no_grad():
+
+        roi = svhn_transform(roi).unsqueeze(0)
+        roi = roi.to(device)
+        prediction = model(roi)
+        #print(prediction)
+        val = np.argmax(prediction.to('cpu').numpy())
+    return val
+
+def predictKerasModel(roi, model, img_size):
+    """
+    """
+    #Resize the image
+    roi = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
+    roi = cv2.resize(roi, (img_size, img_size), interpolation=cv2.INTER_AREA)
+    roi = cv2.dilate(roi, (3, 3))
+    roi = cv2.erode(roi, (6, 6))
+    roi = roi / 255
+
+    ext_digit = roi.reshape(1,28,28,1)
+    prediction= model.predict(ext_digit, verbose = 0)
+    val = np.argmax(prediction[0])
+    return val, roi
+
+def GetNumericTotals(img, rects, total_lbl, digit_lbl, model):
+    """
+    Given an image, digits bounding box coordinates, and their labels,
+    compute and return a list with the detected totales
+    Adaptado de https://github.com/leaguilar/election_count_helper
+    """
+
+    img_size = 28 # for Keras,    32 for pytorch
+
+    totals = [0]*(max(total_lbl)+1)
+    img_n = img.copy()
+    a = np.zeros((img_size,img_size,1))
+
+    for i, rect in enumerate(rects):
+
+        x,y,w,h = resizeRect(rect, 1.2, img.shape)
+        roi = img[y:y+h, x:x+h]
+
+        #val = predictPytorchModel(roi,model, img_size)
+        val,roi = predictKerasModel(roi.copy(), model, img_size)
+
+        totals[total_lbl[i]] += val*(10**digit_lbl[i])
+        img_n = cv2.putText(img_n, str(val), (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
+        roi =  roi.reshape(img_size,img_size,-1) #cv2.resize(roi,(img_size,img_size))
+        a = np.concatenate((a,roi), axis = 0)
+
+    img_n = a
+    return totals, img_n
+
+def loadPytorchModel():
+    """
+    Load the digit recognition model
+    """
+    import torch
+
+    model = MNISTResNet()
+
+    # load weights and state
+    checkpoint = torch.load(model_save_path+weight_file+"200.pt", map_location='cpu')
+    model.load_state_dict(checkpoint['model'])
+    print("Loaded {}".format(model_save_path+weight_file+"200.pt"))
+    return model 
+
+def loadKerasModel():
+    """
+    """
+    model_name = "WideResNet28_10"
+    model=WideResNet28_10()
+    model.compile()
+    model.load_weights(model_save_path + model_name + '.h5')
+    print("Loaded {}".format(model_save_path + model_name + '.h5'))
+    return model
 
 if __name__ == '__main__':
+
     args = build_arg_parser()
-
     actas_dir = './datasets/2davuelta/sim/'
-    actas_filenames = os.listdir(actas_dir)[:]
+    actas_filenames = os.listdir(actas_dir)[:10]
 
-    t1 = time.time()
-
-    titulo1 = 'ACTAFINALCIERREYESCRUTINIOS'
-    titulo2 = 'PRESIDENTEYVICEPRESIDENTE'
-
-    successes = 0
-    successes_title1 = 0
-    successes_title2 = 0
-
-    ratio1_s = []   
-    ratio2_s = []
-    w1 = []
-    w2 = []
-    h1 = []
-    h2 = []
+    #model = loadPytorchModel()
+    model = loadKerasModel()
 
     # buenas keywords siglas, ACTAFINALCIERREYESCRUTINIOS, PRESIDENTEYVICEPRESIDENTE
     keywords = ['OBSERVACIONES', 'PRESIDENTEYVICEPRESIDENTE']
@@ -265,128 +478,51 @@ if __name__ == '__main__':
     for i, file in enumerate(actas_filenames):
 
         print("Imagen {}: {}".format(i,file))
-        image = cv2.imread(actas_dir + file)
-        image, success = FindResize(image, dw, dh)
+        original = cv2.imread(actas_dir + file)
+        image, success, scale = FindResize(original.copy(), dw, dh)
         d = OCR(image.copy())
-        
-        
         coords, success = GetBoundingBox(image, d)
-        if (success):
-            print(" >> Se encontraron palabras")
+        coords = coords*(1.0/scale)
+        (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+
+        totales_crop = original[y:y+h, x:x+w]
+        gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
+        edges = cv2.Canny(gray.copy(), 50, 200, 5)
+        #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
+        rects = ExtractRectangles(edges)
+        (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects)
+        cleaned_rects = removeChildrenRects(cleaned_rects)
+        
+        ntotales=7
+        ndigitos=3
+        if (len(cleaned_rects_vcenter)>ntotales):
+            totals_mean,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
         else:
-            print(" >> No se encontraron palabras")
-        coords = np.array(coords).reshape(-1,4)
+            print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
+            #return (True,-3)
+            continue
+        
+        if (len(cleaned_rects_vcenter)>ntotales):
+            digit_lab,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
+        else:
+            print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
+            #return (True,-4)
+            continue
 
-        for j, coor in enumerate(coords):
-            (x,y,w,h) = (coor[0], coor[1], coor[2], coor[3])
-            if success:
-                c1 = np.random.randint(0,256)
-                c2 = np.random.randint(0,256)
-                c3 = np.random.randint(0,256)
-                #image = cv2.circle(image, (x,y), 3, (0,255,0), 2)
-                image = cv2.rectangle(image,(x, y),(x + w, y + h),(c1, c2, c3),3)
-                image = cv2.putText(image,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
-            else:
-                #image = cv2.circle(image, (x,y), 6, (0,0,255), 2)
-                image = cv2.rectangle(image,(x,y),(x + w, y + h),(0,0,255),3)
+        cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
 
-        bbox = np.mean(coords, axis = 0)
-        (x, y, w, h) = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
-        image = cv2.rectangle(image, (x, y), (x + w, y + h), (255, 0, 255), 2)
+        totales, img_n = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
+        print(">>  Totales: {}".format(totales))
+           
+            
+        #for i,rect in enumerate(cleaned_rects):
+        #    dx,dy,dw,dh = rect
+        #    totales_crop = cv2.rectangle(totales_crop,(dx,dy),(dx+dw,dy+dh),(0,255,0),2)
+        #    #totales_crop = cv2.putText(totales_crop,str(digit_lbl[i]), (dx,dy), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
+        #    #totales_crop = cv2.putText(totales_crop,str(totals_lbl[i]), (10,dy), cv2.FONT_HERSHEY_SIMPLEX, 2,(255,0,0),2,cv2.LINE_AA)
+        
 
-        cv2.imshow('fig',cv2.resize(image, None, fx=0.5, fy = 0.5))
+        cv2.imshow('fig',cv2.resize(img_n, None, fx=1.0, fy = 1.0))
         cv2.waitKey()
         cv2.destroyAllWindows()        
         
-    """
-    kw_found = 0
-    for i, keyword in enumerate(keywords): 
-        success, index, ratio, matching_word = FuzzyMatch(keyword, d['text'])
-        if success:
-            kw_found = kw_found + 1
-            if (i == 0):
-                k1.append(ratio)
-            elif (i == 1):
-                k2.append(ratio)
-            else:
-                continue
-
-    if (kw_found == 2):
-        both  = both + 1
-    elif (kw_found == 1):
-        one = one + 1
-    elif(kw_found == 0):
-        none = none + 1
-    else:
-        continue
-        
-    print("{} se encontro en {}, {}% actas con un avg ratio {} std {}  max {} min {}".format(keywords[0], len(k1), 100.0*len(k1)/len(actas_filenames), np.mean(k1), np.std(k1), np.min(k1), np.max(k1)))
-    print("{} se encontro en {}, {}% actas con un avg ratio {} std {}  max {} min {}".format(keywords[1], len(k2), 100.0*len(k2)/len(actas_filenames), np.mean(k2), np.std(k2), np.min(k2), np.max(k2)))
-    print("Se encontro ambas en {} actas {}%".format(both, 100.0*both/len(actas_filenames)))
-    print("Se encontro solo 1 palabra en {} actas {}%".format(one, 100.0*one/len(actas_filenames)))
-    print("No se encontro nada en {} actas {}%".format(none, 100.0*none/len(actas_filenames)))
-    """
-
-
-
-    """
-
-
-
-        success1, index, ratio = FuzzyMatch(titulo1, d['text'])
-        if success1:
-            successes_title1 = successes_title1 + 1
-            ratio1_s.append(ratio)
-            w1.append(d['width'][index])
-            h1.append(d['height'][index])
-        else:
-            print('No se encontro {}\n'.format(titulo1))
-            print(d['text'])
-
-
-        success2, index, ratio = FuzzyMatch(titulo2, d['text'])
-        if success2:
-            successes_title2 = successes_title2 + 1
-            ratio2_s.append(ratio)
-            h2.append(d['height'][index])
-            w2.append(d['width'][index])
-        else:
-            print('No se encontro {}\n'.format(titulo2))
-            print(d['text'])
-
-        if success1 and success2:
-            successes = successes + 1
-
-    t2 = time.time()
-
-    print("OCR Time: {:.4f}".format(t2 - t1))
-    print("Se encontro ambas en {} de {} ({}%)".format(successes, len(actas_filenames), 100.0*successes/len(actas_filenames)))
-    print("Se encontro {} en {} de {} ({:.2f}%)".format(titulo1 ,successes_title1, len(actas_filenames), 100.0*successes_title1/len(actas_filenames)))
-    print("    Width  avg {}  std {} min {} max {}".format(np.mean(w1), np.std(w1),  np.min(w1), np.max(w1)))
-    print("    Height avg {}  std {} min {} max {}".format(np.mean(h1), np.std(h1),  np.min(h1), np.max(h1)))
-    print("Se encontro {} en {} de {} ({:.2f}%)".format(titulo2 ,successes_title2, len(actas_filenames), 100.0*successes_title2/len(actas_filenames)))
-    print("    Width  avg {}  std {} min {} max {}".format(np.mean(w2), np.std(w2),  np.min(w2), np.max(w2)))
-    print("    Height avg {}  std {} min {} max {}".format(np.mean(h2), np.std(h2),  np.min(h2), np.max(h2)))
-
-    fig = plt.figure()
-    ax = fig.add_subplot(1,1,1)
-
-    
-    actas_eval = ['295.jpg', '120.jpg']
-    for acta in actas_eval:
-        image = cv2.imread(actas_dir + acta)
-        image, success = FindResize(image, dw, dh)
-        d = ExtractData(image.copy())
-        print(d['text'])
-        success, word = FuzzyMatch(titulo1, d['text'])
-        if success:
-            print("Se encontro {}".format(word))
-        else:
-            print("No se encontro")
-        image = DrawBoxes(image,d)
-    """
-
-    #ax.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-    #plt.show()
-    #i = input('Presionar para ver {}'.format(acta))
-
