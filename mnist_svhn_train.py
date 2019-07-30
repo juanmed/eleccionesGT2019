@@ -23,19 +23,19 @@ if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
 #hyperparametros
-num_epochs = 4
+num_epochs = 200
 learning_rate = 0.005
 momentum = 0.5
 weight_decay = 0.005
 save_model = True
-save_frequency = 2
+save_frequency = 30
 step_size = 150
 gamma = 0.5
 img_size = 32
 
 
-batch_size_train = 4
-batch_size_test = 4
+batch_size_train = 16
+batch_size_test = 16
 batch_size_val = 1
 
 img_width = 1634

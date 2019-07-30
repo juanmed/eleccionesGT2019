@@ -5,6 +5,7 @@ Este proyecto utiliza algoritmos de inteligencia artificial y visión por comput
 El flujo es sencillo: se obtiene un acta, se "dibujan" rectangulos que contengan cada total de interés, se extrae el total en cada rectángulo, y se genera un reporte (en formato .json).
 
 ![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000102.jpg)
+![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/300_nocuadro.png)
 ![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/7.png)
 
 
@@ -43,7 +44,7 @@ python -m pip install -r requerimientos.txt
 
 Es necesario installar tesseract (usando el código fuente) y pytesseract. En [este link](https://lengerrong.blogspot.com/2017/03/how-to-build-latest-tesseract-leptonica.html) se puede encontrar el procedimiento. Tesseract necesita algunos [archivos de extensión .traineddata](https://github.com/tesseract-ocr/tessdata) para trabajar con distintos lenguajes: estos se deberían almacenar en ```/usr/local/share/tessdata```. Cuando yo seguí este procedimiento, dicho folder estaba vacío y mi código no funcionaba. La solución es descargarlos según el lenguaje a utilizar y guardarlos en la carpeta indicada. Yo descargué y guarde en esa carpeta el archivo ```eng.traineddata``` que corresponde al idioma inglés.
 
-* Si hubiese algún problema con en la instalación de pytesseract, seguir la [información oficial](https://github.com/tesseract-ocr/tesseract/wiki).
+* Si hubiese algún problema con la instalación de pytesseract, seguir la [información oficial](https://github.com/tesseract-ocr/tesseract/wiki).
 
 * Si utilizas CUDA10, por favor ver las instrucciones de instalación de Pytorch y torchvision más abajo
 
@@ -71,8 +72,26 @@ cp references/detection/engine.py ../
 cp references/detection/coco_utils.py ../
 cd ../
 ```
+# Ejecutar para analizar actas de la 2da vuelta
 
-g) Descarga los datasets de actas de votos de las Elecciones Generales de Guatemala 2019:
+a) Crear una carpeta con el nombre 'weights'  y dentro de esta guardar el archivo de pesos para la red neuronal que se encuentra en este link:
+
+https://drive.google.com/open?id=181ygFISww_ZWK7Y1pH3awqjebhd9vrJL 
+
+b) Descarga fotos de actas simuladas de la 2da vuelta y guardalas en el directorio 'datasets/2davuelta/sim/'
+
+https://drive.google.com/open?id=1kdtIRkpx3XH-p-0PKmP3V56w5579uBRx
+
+c) Abre una terminal y:
+
+```bash
+
+cd <eleccionesGT2019 directory>
+python preprocess.py
+```
+
+El script de analisis se ejecutara, mostrará la imagen de cada acta con la información reconocida en cada una de ellas. Pulsa cualquier tecla para ver las siguiente acta. 
+
 
 ```bash
 PENDIENTE!

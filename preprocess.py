@@ -15,12 +15,12 @@ from fuzzywuzzy import fuzz
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
 
-#import torch
+import torch  # comentar esta linear para correr el modelo con keras
 import params
 
 
 model_save_path = "./weights/"
-weight_file = "mnist_svhn_resnet"
+weight_file = "mnist_svhn_resnet_rand_"
 
 
 max_size = 1500
@@ -516,8 +516,8 @@ def GetNumericTotals(img, rects, total_lbl, digit_lbl, model):
         x,y,w,h = resizeRect(rect, 1.2, img.shape)
         roi = img[y:y+h, x:x+h]
 
-        #val, roi = predictPytorchModel(roi,model, img_size)
-        val, roi = predictKerasModel(roi.copy(), model, img_size)
+        val, roi = predictPytorchModel(roi,model, img_size)
+        #val, roi = predictKerasModel(roi.copy(), model, img_size)
 
         totals[total_lbl[i]] += val*(10**digit_lbl[i])
         img_n = cv2.rectangle(img_n,(x, y),(x + w, y + h),(0, 255, 0),3)
@@ -537,9 +537,9 @@ def loadPytorchModel():
     model = MNISTResNet()
 
     # load weights and state
-    checkpoint = torch.load(model_save_path+weight_file+"200.pt", map_location='cpu')
+    checkpoint = torch.load(model_save_path+weight_file+"030.pt", map_location='cpu')
     model.load_state_dict(checkpoint['model'])
-    print("Loaded {}".format(model_save_path+weight_file+"200.pt"))
+    print("Loaded {}".format(model_save_path+weight_file+"030.pt"))
     return model 
 
 def loadKerasModel():
@@ -604,11 +604,11 @@ def processActa(img , model):
 if __name__ == '__main__':
 
     args = build_arg_parser()
-    actas_dir = './datasets/2davuelta/cuadro/'
-    actas_filenames = os.listdir(actas_dir)[:10]
+    actas_dir = './datasets/2davuelta/sim/'
+    actas_filenames = os.listdir(actas_dir)[:]
 
-    #model = loadPytorchModel()
-    model = loadKerasModel()
+    model = loadPytorchModel()
+    #model = loadKerasModel()
 
     for i, file in enumerate(actas_filenames):
 
