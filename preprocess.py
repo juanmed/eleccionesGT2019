@@ -21,7 +21,9 @@ import params
 
 model_save_path = "./weights/"
 weight_file = "mnist_svhn_resnet_rand_"
-
+out_image_save_path = "./output/images/"
+if not os.path.exists(out_image_save_path):
+    os.mkdir(out_image_save_path)
 
 max_size = 1500
 
@@ -105,12 +107,13 @@ def FuzzyMatch(word,matching_words):
             continue
     return False, -1, ratio, mw
 
-def OCR(img):   
+def OCR(img, whtlst = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"):   
     """
     Hacer OCR en la imagen.
     Adaptado de https://github.com/leaguilar/election_count_helper
     """
-    d = pytesseract.image_to_data(img, output_type=Output.DICT, config="-c tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz")
+    whitelist = "-c tessedit_char_whitelist={}".format(whtlst)
+    d = pytesseract.image_to_data(img, output_type=Output.DICT, config=whitelist)
     return d
 
 def GetIndex(d,word,first=True):
@@ -160,13 +163,13 @@ def GetBoundingBoxMesa(d):
     # default values
     x = 350#225
     y = 650
-    w = 100
+    w = 200
     h = 100 
 
-    t1_x_offset = 70
-    t1_y_offset = 60
-    t2_x_offset = 200 
-    t2_y_offset = -270
+    t1_x_offset = 0    # 70
+    t1_y_offset = 60    # 60
+    t2_x_offset = 130   # 200
+    t2_y_offset = -270  # -270
 
     coord = []
 
@@ -344,6 +347,8 @@ def removeChildrenRects(rects):
     Remover rectangulos que estan dentro de un rectangulo mas grande y dejar
     solo los mas externos
     """
+    cleaned_rects_vcenter=[]
+    cleaned_rects_hcenter=[]
     only_external = []
     is_external = []
     for i in range(len(rects)):
@@ -352,7 +357,7 @@ def removeChildrenRects(rects):
         for j in range(len(rects)):
             if (j != i):
                 x,y,w,h = rects[j]
-                if ( (cx > x) and (cy > y) and ((cx + cw) < (x+w)) and ((cy + ch) < (y + h))):
+                if ( (cx >= x) and (cy >= y) and ((cx + cw) <= (x+w)) and ((cy + ch) <= (y + h))):
                     has_parent = True
                     break
                 else:
@@ -368,8 +373,13 @@ def removeChildrenRects(rects):
     for i in range(len(rects)):
         if(is_external[i]):
             only_external.append(rects[i])
+            cleaned_rects_vcenter.append(rects[i][1] + rects[i][3]//2)
+            cleaned_rects_hcenter.append(rects[i][0] + rects[i][2]//2)
 
-    return only_external
+    cleaned_rects_vcenter=np.array(cleaned_rects_vcenter).reshape(-1,1)
+    cleaned_rects_hcenter=np.array(cleaned_rects_hcenter).reshape(-1,1)
+
+    return only_external, cleaned_rects_vcenter, cleaned_rects_hcenter
 
 def CleanRectangles(rects, h_min=35, w_min=25, h_max = 75, w_max = 75):
     """
@@ -435,6 +445,7 @@ def GetStandardRects(w,h, x_ps, y_ps):
 
 def resizeRect(rect, scale, imgshape):
     """
+    Redimensionar un rectangulo por un factor 'scale'
     """
     h, w, channels = imgshape
     # Make the rectangular region around the digit
@@ -521,7 +532,9 @@ def GetNumericTotals(img, rects, total_lbl, digit_lbl, model):
 
         totals[total_lbl[i]] += val*(10**digit_lbl[i])
         img_n = cv2.rectangle(img_n,(x, y),(x + w, y + h),(0, 255, 0),3)
-        img_n = cv2.putText(img_n, str(val), (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
+        img_n = cv2.putText(img_n, str(val), (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)        
+        #img_n = cv2.putText(img_n, str(digit_lbl[i]), (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
+        #img_n = cv2.putText(img_n, str(total_lbl[i]), (10 ,y), cv2.FONT_HERSHEY_SIMPLEX, 2,(255,0,0),2,cv2.LINE_AA)
         roi =  roi.reshape(img_size,img_size,-1) #cv2.resize(roi,(img_size,img_size))
         a = np.concatenate((a,roi), axis = 0)
 
@@ -556,31 +569,25 @@ def loadKerasModel():
     print("Loaded {}".format(model_save_path + model_name + '.h5'))
     return model
 
-def processActa(img , model):
+def getVotosData(img,d, model, scale):
     """
+    Obtener un crop de todos los totales de votos (partidos, validos, invalidos, etc),
+    reconocer los digitos y dichos totales, y devolver los datos, junto con un crop con
+    los datos superpuestos y una bandera de problemas.
     """
-    problem = False
-    image, success, scale = FindResize(img.copy(), dw, dh)
-    d = OCR(image.copy())
 
+    problem = False
     coords, success = GetBoundingBoxTotales(d)
     coords = coords*(1.0/scale)
     (tx, ty, tw, th) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
-
-    coords, success = GetBoundingBoxMesa(d)
-    coords = coords*(1.0/scale)
-    (mx, my, mw, mh) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
-
     totales_crop = img[ty:ty+th, tx:tx+tw]
-    mesa_crop = img[my:my+mh, mx:mx+mw]
-
     
     gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray.copy(), 50, 200, 5)
     #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
     rects = ExtractRectangles(edges)
     (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects)
-    cleaned_rects = removeChildrenRects(cleaned_rects)
+    cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = removeChildrenRects(cleaned_rects)
 
     ntotales=7
     ndigitos=3
@@ -588,24 +595,95 @@ def processActa(img , model):
         totals_lbl,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
     else:
         print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
-        return 0,0,-1
+        return 0,0,-1,0
     
     if (len(cleaned_rects_vcenter)>ntotales):
         digit_lbl,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
+        digit_lbl = [-1*lbl+2 for lbl in digit_lbl]  # convertir digit_lbl a las correctas potencias de 10
     else:
         print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
-        return 0,0,-2
+        return 0,0,-2,0
 
-    #cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
-    totales, img_n = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
+    cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
+    totales, img_totales = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
     
-    return totales, img_n, problem
+    return totales, img_totales, problem, coords
+
+def getMesaData(img, d, scale):
+    """
+    Obtener el crop que contiene el numero de mesa, municipio y departamento,
+    identificar dichos numeros y devolverlos junto con el crop con los datos
+    identificados superpuestos.
+    """
+
+    coords, success = GetBoundingBoxMesa(d)
+    coords = coords*(1.0/scale)
+    (mx, my, mw, mh) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+
+    mesa_crop = img[my:my+mh, mx:mx+mw]
+    d = OCR(mesa_crop.copy(), "0123456789")
+    print(d['text'])
+    mesa_data_raw = []
+    pass_next = False
+    for j,element in enumerate(d['text']):
+
+        if pass_next:
+            pass_next = False
+            continue
+        else:
+            if (len(element)) == 2:
+                mesa_data_raw.append((j,element))
+            elif( len(element) == 1):
+                if( (j+1) != len(d['text'])):
+                    if (len(d['text'][j+1]) == 1):
+                        val = element+d['text'][j+1]
+                        mesa_data_raw.append((j, val))
+                        pass_next = True
+                    else:
+                        continue
+                else:
+                    continue
+            else:
+                pass_next = False
+
+    mesa_mun_dep =[int(ele[1]) for ele in mesa_data_raw]
+    for i, val in mesa_data_raw:
+        (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
+        mesa_crop = cv2.putText(mesa_crop, val, (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)        
+
+    cv2.imshow('fig',cv2.resize(mesa_crop, None, fx=1.0, fy = 1.0))
+    cv2.waitKey()
+    cv2.destroyAllWindows() 
+
+    return mesa_mun_dep,mesa_crop,0,coords
+
+def getImpugnacionesData(img, d, scale):
+    return 0,0,0,0
+
+def processActa(img , model):
+    """
+    """
+    problem = False
+    image, success, scale = FindResize(img.copy(), dw, dh)
+    d = OCR(image.copy())
+
+    totales, totales_img, totales_problem, tcoords = getVotosData(img.copy(), d, model, scale)
+    mesa_data, mesa_img, mesa_problem, mcoords = getMesaData(img.copy(),d, scale)
+    impug_data, impug_img, impug_problem, icoords = getImpugnacionesData(img.copy(),d, scale)
+
+
+    tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
+    img[ty:ty+th,tx:tx+tw] = totales_img
+    mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
+    img[my:my+mh,mx:mx+mw] = mesa_img
+
+    return totales, img, problem
 
 if __name__ == '__main__':
 
     args = build_arg_parser()
-    actas_dir = './datasets/2davuelta/sim/'
-    actas_filenames = os.listdir(actas_dir)[:]
+    actas_dir = './datasets/2davuelta/no_cuadro/'
+    actas_filenames = os.listdir(actas_dir)[:1]
 
     model = loadPytorchModel()
     #model = loadKerasModel()
@@ -615,7 +693,7 @@ if __name__ == '__main__':
         print("Imagen {}: {}".format(i,file))
         original = cv2.imread(actas_dir + file)
 
-        totales, img_crop, problem = processActa(original.copy(), model)
+        totales, img_with_data, problem = processActa(original.copy(), model)
 
         if problem < 0:
             if (problem == -1):
@@ -626,7 +704,8 @@ if __name__ == '__main__':
                 print("No existe este codigo de problem.")
         else:
             print (totales)
-            cv2.imshow('fig',cv2.resize(img_crop, None, fx=0.75, fy = 0.75))
+            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
+            cv2.imwrite(out_image_save_path+'result_small_'+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
             cv2.waitKey()
             cv2.destroyAllWindows()        
         
@@ -653,4 +732,6 @@ if __name__ == '__main__':
 """
 
 # TODO
-# Confude 7 con 1, espacio vacio con 1, 
+# -Confude 7 con 1, espacio vacio con 1, 
+# -Remover el recuadro que encierra a los digitos. Tiene un efecto negativo en la prediccion
+# -Anadir numeros testados al dataset para aunque sea indicar que un humano debe revisar el acta

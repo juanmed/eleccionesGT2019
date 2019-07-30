@@ -2,12 +2,11 @@
 
 Este proyecto utiliza algoritmos de inteligencia artificial y visión por computadora para procesar imágenes de actas de votaciones y obtener los resultados de votos por partido y totales relevantes (votos válidos, nulos, etc).
 
-El flujo es sencillo: se obtiene un acta, se "dibujan" rectangulos que contengan cada total de interés, se extrae el total en cada rectángulo, y se genera un reporte (en formato .json).
+El flujo es sencillo: se obtiene un acta, se "dibujan" rectangulos que contengan cada dato de interés, se extrae el total en cada rectángulo, y se genera un reporte (en formato .json).
 
-![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000102.jpg)
+![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/result_small_303.jpg)
 ![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/303_nocuadro.png)
-![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/7.png)
-
+![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/000102.jpg)
 
 # Instalacion
 
@@ -91,12 +90,6 @@ python preprocess.py
 ```
 
 El script de analisis se ejecutara, mostrará la imagen de cada acta con la información reconocida en cada una de ellas. Pulsa cualquier tecla para ver las siguiente acta. 
-
-
-```bash
-PENDIENTE!
-```
-
 
 
 ## Instalar Pytorch y Torchvision con CUDA10
