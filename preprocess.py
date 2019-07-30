@@ -155,6 +155,92 @@ def GetKeywordIndex(d, keywords):
             words.append(matching_word)
     return indices, words
 
+def GetBoundingBoxPapeletas(d):
+    """
+    """
+    keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']
+
+    # default values
+    x = 350#225
+    y = 650
+    w = 320
+    h = 80 
+
+    t1_x_offset = -200    # 70
+    t1_y_offset = 350    # 60
+    t2_x_offset = -70   # 200
+    t2_y_offset = 20  # -270
+
+    coord = []
+
+    idx, words = GetKeywordIndex(d, keywords)
+    success = False
+    if len(idx) == 2:
+        t1_x = d['left'][idx[0]]
+        t1_y = d['top'][idx[0]]
+        t1_w = d['width'][idx[0]]
+        t1_h = d['height'][idx[0]]
+
+        p1_y = t1_y + t1_y_offset #int(params.t1_p1_h_offset * t1_h / params.t1_h) + t1_y
+        p1_x = (t1_x + t1_x_offset) if (t1_x + t1_x_offset) > 0 else 0 #int(params.t1_p1_w_offset * t1_w / params.t1_w) + t1_x
+
+        coord.append([p1_x, p1_y, w, h])
+
+        t2_x = d['left'][idx[1]]
+        t2_y = d['top'][idx[1]]
+        t2_w = d['width'][idx[1]]
+        t2_h = d['height'][idx[1]]
+
+        p1_y = t2_y + t2_y_offset #int(params.t2_p1_h_offset * t2_h / params.t2_h) + t2_y
+        p1_x = t2_x + t2_x_offset #int(params.t2_p1_w_offset * t2_w / params.t2_w) + t2_x
+
+        coord.append([p1_x, p1_y, w, h])
+        success = True
+        #return coord, True
+
+    elif len(idx) == 1:
+        
+        word = d['text'][idx[0]]
+        for i, keyword in enumerate(keywords):
+            if( word[0] == keyword[0]):
+                break
+
+        t_x = d['left'][idx[0]]
+        t_y = d['top'][idx[0]]
+        t_w = d['width'][idx[0]]
+        t_h = d['height'][idx[0]]
+
+        if i == 0:
+
+            p1_y = t_y + t1_y_offset #int(params.t1_p1_h_offset * t_h / params.t1_h) + t_y
+            p1_x = (t_x + t1_x_offset) if (t_x + t1_x_offset) > 0 else 0 #int(params.t1_p1_w_offset * t_w / params.t1_w) + t_x
+            p1_w = int(params.bbox_w * t_w / params.t1_w )
+            p1_h = int(params.bbox_h * t_h / params.t1_h) 
+            coord.append([p1_x, p1_y, w, h])
+
+        elif i == 1 :
+
+            p1_y = t_y + t2_y_offset #int(params.t2_p1_h_offset * t_h / params.t2_h) + t_y
+            p1_x = t_x + t2_x_offset #int(params.t2_p1_w_offset * t_w / params.t2_w) + t_x
+            p1_w = int(params.bbox_w * t_w / params.t2_w )
+            p1_h = int(params.bbox_h * t_h / params.t2_h) 
+            coord.append([p1_x, p1_y, w, h])
+
+        else:
+            print("Imposible keyword")
+
+        success = True
+        #return coord, True
+
+    else:
+        coord.append([x, y, w, h])
+        success = False
+        #return coord, False
+
+    coord = np.array(coord).reshape(-1,4)
+    #coord = np.mean(coord, axis = 0)
+    return coord, success
+
 def GetBoundingBoxMesa(d):
     """
     """
@@ -651,14 +737,42 @@ def getMesaData(img, d, scale):
         (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
         mesa_crop = cv2.putText(mesa_crop, val, (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)        
 
-    cv2.imshow('fig',cv2.resize(mesa_crop, None, fx=1.0, fy = 1.0))
-    cv2.waitKey()
-    cv2.destroyAllWindows() 
+    #cv2.imshow('fig',cv2.resize(mesa_crop, None, fx=1.0, fy = 1.0))
+    #cv2.waitKey()
+    #cv2.destroyAllWindows() 
 
     return mesa_mun_dep,mesa_crop,0,coords
 
 def getImpugnacionesData(img, d, scale):
     return 0,0,0,0
+
+def getPapeletasRecibidas(img, d, scale):
+    """
+    Obtener el total de papeletas recibidas
+    """
+    coords, success = GetBoundingBoxPapeletas(d)
+    coords = coords*(1.0/scale)
+
+    for j, coor in enumerate(coords):
+        (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
+        if success:
+            c1 = np.random.randint(0,256)
+            c2 = np.random.randint(0,256)
+            c3 = np.random.randint(0,256)
+            img = cv2.rectangle(img,(x, y),(x + w, y + h),(c1, c2, c3),3)
+            img = cv2.putText(img,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
+        else:
+            img = cv2.rectangle(img,(x,y),(x + w, y + h),(0,0,255),3)
+
+    bbox = np.mean(coords, axis = 0)
+    (x, y, w, h) = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+
+    #(px, py, pw, ph) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+
+
+    return 0,img,0,0
 
 def processActa(img , model):
     """
@@ -667,17 +781,19 @@ def processActa(img , model):
     image, success, scale = FindResize(img.copy(), dw, dh)
     d = OCR(image.copy())
 
-    totales, totales_img, totales_problem, tcoords = getVotosData(img.copy(), d, model, scale)
-    mesa_data, mesa_img, mesa_problem, mcoords = getMesaData(img.copy(),d, scale)
-    impug_data, impug_img, impug_problem, icoords = getImpugnacionesData(img.copy(),d, scale)
+    #totales, totales_img, totales_problem, tcoords = getVotosData(img.copy(), d, model, scale)
+    #mesa_data, mesa_img, mesa_problem, mcoords = getMesaData(img.copy(),d, scale)
+    #impug_data, impug_img, impug_problem, icoords = getImpugnacionesData(img.copy(),d, scale)
+    papel_data, papel_img, papel_problem, pcoords = getPapeletasRecibidas(img.copy(),d, scale)
 
 
-    tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
-    img[ty:ty+th,tx:tx+tw] = totales_img
-    mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
-    img[my:my+mh,mx:mx+mw] = mesa_img
+    #tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
+    #img[ty:ty+th,tx:tx+tw] = totales_img
+    #mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
+    #img[my:my+mh,mx:mx+mw] = mesa_img
 
-    return totales, img, problem
+    problem = 1
+    return 0, papel_img, problem
 
 if __name__ == '__main__':
 
@@ -704,8 +820,8 @@ if __name__ == '__main__':
                 print("No existe este codigo de problem.")
         else:
             print (totales)
-            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
-            cv2.imwrite(out_image_save_path+'result_small_'+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
+            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.25, fy = 0.25))
+            #cv2.imwrite(out_image_save_path+'result_small_'+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
             cv2.waitKey()
             cv2.destroyAllWindows()        
         

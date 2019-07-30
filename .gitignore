@@ -25,3 +25,4 @@ datasets/
 OMRChecker/
 document-scanner/
 *.png
+output/
