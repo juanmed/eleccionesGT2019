@@ -226,13 +226,13 @@ def main():
 
     resume = True
     if(resume):
-        checkpoint = torch.load(model_save_path+weight_file+"190.pt", map_location='cpu')
+        checkpoint = torch.load(model_save_path+weight_file+"1200.pt", map_location='cpu')
         model.load_state_dict(checkpoint['model'])
         optimizer.load_state_dict(checkpoint['optimizer'])
         lr_scheduler.load_state_dict(checkpoint['lr_scheduler']) 
 
 
-    do_learn = True
+    do_learn = False
     if(do_learn):
         # load datasets
         trans = transforms.Compose([transforms.ToTensor()]) #transforms.Resize((img_height, img_width)),
@@ -285,8 +285,8 @@ def main():
         ax = fig.add_subplot(1,1,1)
 
 
-        val_dir = './svhn_dataset/val/'
-        img_dirs = os.listdir(val_dir)
+        val_dir = './svhn_dataset/test/'
+        img_dirs = os.listdir(val_dir)[:10]
         #print(img_dirs)
         img_dirs = [(val_dir + x) for x in img_dirs if '.xml' not in x]
 

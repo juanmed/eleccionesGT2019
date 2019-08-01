@@ -238,7 +238,7 @@ def GetBoundingBoxPapeletas(d):
         #return coord, False
 
     coord = np.array(coord).reshape(-1,4)
-    #coord = np.mean(coord, axis = 0)
+    coord = np.mean(coord, axis = 0)
     return coord, success
 
 def GetBoundingBoxMesa(d):
@@ -417,13 +417,13 @@ def GetBoundingBoxTotales(d):
     coord = np.mean(coord, axis = 0)
     return coord, success
         
-def ExtractRectangles(image):
+def ExtractRectangles(image, type_flag = cv2.RETR_EXTERNAL):
     """
     Obtener rectangular que encierran a cada digito
     Adaptado de https://github.com/leaguilar/election_count_helper
     """
     # Find contours in the image
-    ctrs, hier = cv2.findContours(image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    ctrs, hier = cv2.findContours(image, type_flag, cv2.CHAIN_APPROX_SIMPLE)
     # Get only parent rectangles that contains each contour
     rects = [cv2.boundingRect(ctr) for ctr in ctrs]
     return rects
@@ -446,10 +446,10 @@ def removeChildrenRects(rects):
                 if ( (cx >= x) and (cy >= y) and ((cx + cw) <= (x+w)) and ((cy + ch) <= (y + h))):
                     has_parent = True
                     break
-                else:
-                    continue
-            else:
-                continue
+                #else:
+                #    continue
+            #else:
+            #    continue
 
         if(has_parent):
             is_external.append(False)
@@ -595,7 +595,7 @@ def predictKerasModel(roi, model, img_size):
     val = np.argmax(prediction[0])
     return val, roi
 
-def GetNumericTotals(img, rects, total_lbl, digit_lbl, model):
+def GetNumericTotals(img, rects, total_lbl, digit_lbl, model, resize = 1.2):
     """
     Given an image, digits bounding box coordinates, and their labels,
     compute and return a list with the detected totales
@@ -610,7 +610,7 @@ def GetNumericTotals(img, rects, total_lbl, digit_lbl, model):
 
     for i, rect in enumerate(rects):
 
-        x,y,w,h = resizeRect(rect, 1.2, img.shape)
+        x,y,w,h = resizeRect(rect, resize, img.shape)
         roi = img[y:y+h, x:x+h]
 
         val, roi = predictPytorchModel(roi,model, img_size)
@@ -746,33 +746,59 @@ def getMesaData(img, d, scale):
 def getImpugnacionesData(img, d, scale):
     return 0,0,0,0
 
-def getPapeletasRecibidas(img, d, scale):
+def getPapeletasRecibidas(img, d, model,scale):
     """
     Obtener el total de papeletas recibidas
     """
     coords, success = GetBoundingBoxPapeletas(d)
     coords = coords*(1.0/scale)
-
-    for j, coor in enumerate(coords):
-        (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
-        if success:
-            c1 = np.random.randint(0,256)
-            c2 = np.random.randint(0,256)
-            c3 = np.random.randint(0,256)
-            img = cv2.rectangle(img,(x, y),(x + w, y + h),(c1, c2, c3),3)
-            img = cv2.putText(img,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
-        else:
-            img = cv2.rectangle(img,(x,y),(x + w, y + h),(0,0,255),3)
-
-    bbox = np.mean(coords, axis = 0)
-    (x, y, w, h) = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
-    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    (px, py, pw, ph) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+    papeletas_crop = img[py:py+ph, px:px+pw]
 
 
-    #(px, py, pw, ph) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+    gray = cv2.cvtColor(papeletas_crop.copy(), cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray.copy(), 50, 200, 5)
+    #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
+    rects = ExtractRectangles(edges)
+    rects = sorted(rects, key = (lambda x: x[2]*x[3]), reverse = True)
+
+    (dx, dy, dw, dh) = rects[0]
+    digits_crop = papeletas_crop[ dy:dy+dh, dx:dx+dw ]
+    gray = cv2.cvtColor(digits_crop.copy(), cv2.COLOR_BGR2GRAY)
+    edges = cv2.Canny(gray.copy(), 50, 200, 5)
+    #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
+    rects = ExtractRectangles(edges, type_flag = cv2.RETR_LIST)
+    (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects, h_min = 20, w_min = 15)
+    #cleaned_rects = sorted(cleaned_rects, key = (lambda x: x[2]*x[3]), reverse = True)[0:3]
+    #cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = removeChildrenRects(cleaned_rects)  
+
+    ntotales=1
+    ndigitos=3
+    if (len(cleaned_rects_vcenter)>ntotales):
+        totals_lbl,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
+    else:
+        print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
+        return 0,0,-1,0
+    
+    if (len(cleaned_rects_vcenter)>ntotales):
+        digit_lbl,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
+        digit_lbl = [-1*lbl+2 for lbl in digit_lbl]  # convertir digit_lbl a las correctas potencias de 10
+    else:
+        print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
+        return 0,0,-2,0
+
+    cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
+    cleaned_rects = [(r[0]+dx, r[1]+dy, r[2], r[3]) for r in cleaned_rects ]
+    totales, img_totales = GetNumericTotals(papeletas_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model, 1.2 )
 
 
-    return 0,img,0,0
+    #for rect in cleaned_rects:
+    #    (x, y, w, h) = rect #rects[0]
+    #    cv2.rectangle(digits_crop, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    #(x, y, w, h) = rects[0]
+    #cv2.rectangle(papeletas_crop, (x, y), (x + w, y + h), (0, 0, 255), 2)
+
+    return totales,img_totales,0,coords
 
 def processActa(img , model):
     """
@@ -781,25 +807,30 @@ def processActa(img , model):
     image, success, scale = FindResize(img.copy(), dw, dh)
     d = OCR(image.copy())
 
-    #totales, totales_img, totales_problem, tcoords = getVotosData(img.copy(), d, model, scale)
-    #mesa_data, mesa_img, mesa_problem, mcoords = getMesaData(img.copy(),d, scale)
+    totales, totales_img, totales_problem, tcoords = getVotosData(img.copy(), d, model, scale)
+    mesa_data, mesa_img, mesa_problem, mcoords = getMesaData(img.copy(),d, scale)
     #impug_data, impug_img, impug_problem, icoords = getImpugnacionesData(img.copy(),d, scale)
-    papel_data, papel_img, papel_problem, pcoords = getPapeletasRecibidas(img.copy(),d, scale)
+    papel_data, papel_img, papel_problem, pcoords = getPapeletasRecibidas(img.copy(), d, model, scale)
 
 
-    #tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
-    #img[ty:ty+th,tx:tx+tw] = totales_img
-    #mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
-    #img[my:my+mh,mx:mx+mw] = mesa_img
+    tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
+    img[ty:ty+th,tx:tx+tw] = totales_img
+    
+    mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
+    img[my:my+mh,mx:mx+mw] = mesa_img
+    
+    px,py,pw,ph = (int(pcoords[0]), int(pcoords[1]), int(pcoords[2]), int(pcoords[3]))
+    img[py:py+ph,px:px+pw] = papel_img
+
 
     problem = 1
-    return 0, papel_img, problem
+    return 0, img, problem
 
 if __name__ == '__main__':
 
     args = build_arg_parser()
     actas_dir = './datasets/2davuelta/no_cuadro/'
-    actas_filenames = os.listdir(actas_dir)[:1]
+    actas_filenames = os.listdir(actas_dir)[:]
 
     model = loadPytorchModel()
     #model = loadKerasModel()
@@ -820,8 +851,8 @@ if __name__ == '__main__':
                 print("No existe este codigo de problem.")
         else:
             print (totales)
-            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.25, fy = 0.25))
-            #cv2.imwrite(out_image_save_path+'result_small_'+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
+            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.5, fy = 0.5))
+            cv2.imwrite(out_image_save_path+'result_small_'+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
             cv2.waitKey()
             cv2.destroyAllWindows()        
         
@@ -851,3 +882,4 @@ if __name__ == '__main__':
 # -Confude 7 con 1, espacio vacio con 1, 
 # -Remover el recuadro que encierra a los digitos. Tiene un efecto negativo en la prediccion
 # -Anadir numeros testados al dataset para aunque sea indicar que un humano debe revisar el acta
+# - Definir codigos para cada tipo de problema
