@@ -19,3 +19,5 @@ fuzzywuzzy
 requests
 python-Levenshtein
 imutils
+xlrd
+openpyxl

@@ -14,6 +14,7 @@ from pytesseract import Output
 from fuzzywuzzy import fuzz 
 from sklearn.cluster import KMeans
 import matplotlib.pyplot as plt
+import json
 
 import torch  # comentar esta linear para correr el modelo con keras
 import params
@@ -22,8 +23,11 @@ import params
 model_save_path = "./weights/"
 weight_file = "mnist_svhn_resnet_rand_"
 out_image_save_path = "./output/images/"
+out_json_save_path = "./output/json/"
 if not os.path.exists(out_image_save_path):
     os.mkdir(out_image_save_path)
+if not os.path.exists(out_json_save_path):
+    os.mkdir(out_json_save_path)
 
 max_size = 1500
 
@@ -155,7 +159,7 @@ def GetKeywordIndex(d, keywords):
             words.append(matching_word)
     return indices, words
 
-def GetBoundingBoxPapeletas(d):
+def GetBoundingBox(d, t1_x_offset, t1_y_offset, t2_x_offset, t2_y_offset):
     """
     """
     keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']
@@ -166,10 +170,92 @@ def GetBoundingBoxPapeletas(d):
     w = 320
     h = 80 
 
-    t1_x_offset = -200    # 70
-    t1_y_offset = 350    # 60
-    t2_x_offset = -70   # 200
-    t2_y_offset = 20  # -270
+
+    coord = []
+
+    idx, words = GetKeywordIndex(d, keywords)
+    success = False
+    if len(idx) == 2:
+        t1_x = d['left'][idx[0]]
+        t1_y = d['top'][idx[0]]
+        t1_w = d['width'][idx[0]]
+        t1_h = d['height'][idx[0]]
+
+        p1_y = t1_y + t1_y_offset if (t1_y + t1_y_offset) > 0 else 0
+        p1_x = (t1_x + t1_x_offset) if (t1_x + t1_x_offset) > 0 else 0 
+
+        coord.append([p1_x, p1_y, w, h])
+
+        t2_x = d['left'][idx[1]]
+        t2_y = d['top'][idx[1]]
+        t2_w = d['width'][idx[1]]
+        t2_h = d['height'][idx[1]]
+
+        p1_y = t2_y + t2_y_offset if (t2_y + t2_y_offset) > 0 else 0
+        p1_x = t2_x + t2_x_offset if (t2_x + t2_x_offset) > 0 else 0 
+
+        coord.append([p1_x, p1_y, w, h])
+        success = True
+        #return coord, True
+
+    elif len(idx) == 1:
+        
+        word = d['text'][idx[0]]
+        for i, keyword in enumerate(keywords):
+            if( word[0] == keyword[0]):
+                break
+
+        t_x = d['left'][idx[0]]
+        t_y = d['top'][idx[0]]
+        t_w = d['width'][idx[0]]
+        t_h = d['height'][idx[0]]
+
+        if i == 0:
+
+            p1_y = t_y + t1_y_offset if (t_y + t1_y_offset) > 0 else 0
+            p1_x = (t_x + t1_x_offset) if (t_x + t1_x_offset) > 0 else 0 
+            p1_w = int(params.bbox_w * t_w / params.t1_w )
+            p1_h = int(params.bbox_h * t_h / params.t1_h) 
+            coord.append([p1_x, p1_y, w, h])
+
+        elif i == 1 :
+
+            p1_y = t_y + t2_y_offset if (t_y + t2_y_offset) > 0 else 0
+            p1_x = t_x + t2_x_offset if (t_x + t2_x_offset) > 0 else 0
+            p1_w = int(params.bbox_w * t_w / params.t2_w )
+            p1_h = int(params.bbox_h * t_h / params.t2_h) 
+            coord.append([p1_x, p1_y, w, h])
+
+        else:
+            print("Imposible keyword")
+
+        success = True
+        #return coord, True
+
+    else:
+        coord.append([x, y, w, h])
+        success = False
+        #return coord, False
+
+    coord = np.array(coord).reshape(-1,4)
+    coord = np.mean(coord, axis = 0)
+    return coord, success
+
+def GetBoundingBoxPapeletas(d):
+    """
+    """
+    keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']
+
+    # default values
+    x = 350#225
+    y = 650
+    w = 320
+    h = 80 
+                              # Valores para 2da vuelta simuladas
+    t1_x_offset = -350        # -200
+    t1_y_offset = 370         # 350
+    t2_x_offset = -240         # -70
+    t2_y_offset = 40          # 20
 
     coord = []
 
@@ -191,8 +277,8 @@ def GetBoundingBoxPapeletas(d):
         t2_w = d['width'][idx[1]]
         t2_h = d['height'][idx[1]]
 
-        p1_y = t2_y + t2_y_offset #int(params.t2_p1_h_offset * t2_h / params.t2_h) + t2_y
-        p1_x = t2_x + t2_x_offset #int(params.t2_p1_w_offset * t2_w / params.t2_w) + t2_x
+        p1_y = t2_y + t2_y_offset 
+        p1_x = t2_x + t2_x_offset if (t2_x + t2_x_offset) > 0 else 0 
 
         coord.append([p1_x, p1_y, w, h])
         success = True
@@ -212,7 +298,7 @@ def GetBoundingBoxPapeletas(d):
 
         if i == 0:
 
-            p1_y = t_y + t1_y_offset #int(params.t1_p1_h_offset * t_h / params.t1_h) + t_y
+            p1_y = t_y + t1_y_offset if (t_y + t1_y_offset) > 0 else 0#int(params.t1_p1_h_offset * t_h / params.t1_h) + t_y
             p1_x = (t_x + t1_x_offset) if (t_x + t1_x_offset) > 0 else 0 #int(params.t1_p1_w_offset * t_w / params.t1_w) + t_x
             p1_w = int(params.bbox_w * t_w / params.t1_w )
             p1_h = int(params.bbox_h * t_h / params.t1_h) 
@@ -220,8 +306,8 @@ def GetBoundingBoxPapeletas(d):
 
         elif i == 1 :
 
-            p1_y = t_y + t2_y_offset #int(params.t2_p1_h_offset * t_h / params.t2_h) + t_y
-            p1_x = t_x + t2_x_offset #int(params.t2_p1_w_offset * t_w / params.t2_w) + t_x
+            p1_y = t_y + t2_y_offset if (t_y + t2_y_offset) > 0 else 0#int(params.t2_p1_h_offset * t_h / params.t2_h) + t_y
+            p1_x = t_x + t2_x_offset if (t_x + t2_x_offset) > 0 else 0#int(params.t2_p1_w_offset * t_w / params.t2_w) + t_x
             p1_w = int(params.bbox_w * t_w / params.t2_w )
             p1_h = int(params.bbox_h * t_h / params.t2_h) 
             coord.append([p1_x, p1_y, w, h])
@@ -335,13 +421,13 @@ def GetBoundingBoxTotales(d):
     # default values
     x = 350#225
     y = 650
-    w = 200
-    h = 550 
+    w = 240
+    h = 530 
 
-    t1_x_offset = 25
-    t1_y_offset = 470
-    t2_x_offset = 205 
-    t2_y_offset = 125
+    t1_x_offset = 5        #25
+    t1_y_offset = 450       #470
+    t2_x_offset = 185       #205
+    t2_y_offset = 105       #125
 
     coord = []
 
@@ -663,8 +749,9 @@ def getVotosData(img,d, model, scale):
     """
 
     problem = False
-    coords, success = GetBoundingBoxTotales(d)
+    coords, success = GetBoundingBoxTotales(d)#, 25, 470, 205, 125)
     coords = coords*(1.0/scale)
+
     (tx, ty, tw, th) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
     totales_crop = img[ty:ty+th, tx:tx+tw]
     
@@ -702,13 +789,12 @@ def getMesaData(img, d, scale):
     identificados superpuestos.
     """
 
-    coords, success = GetBoundingBoxMesa(d)
+    coords, success = GetBoundingBoxMesa(d)#, 0, 60, 130, -270)
     coords = coords*(1.0/scale)
     (mx, my, mw, mh) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
 
     mesa_crop = img[my:my+mh, mx:mx+mw]
     d = OCR(mesa_crop.copy(), "0123456789")
-    print(d['text'])
     mesa_data_raw = []
     pass_next = False
     for j,element in enumerate(d['text']):
@@ -717,8 +803,11 @@ def getMesaData(img, d, scale):
             pass_next = False
             continue
         else:
+            # Si se detecto un elemento de 2 caracteres, seguro es uno de los valores
             if (len(element)) == 2:
                 mesa_data_raw.append((j,element))
+
+            # a veces se detectan los digitos por separado, intentar capturar 
             elif( len(element) == 1):
                 if( (j+1) != len(d['text'])):
                     if (len(d['text'][j+1]) == 1):
@@ -737,10 +826,6 @@ def getMesaData(img, d, scale):
         (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
         mesa_crop = cv2.putText(mesa_crop, val, (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)        
 
-    #cv2.imshow('fig',cv2.resize(mesa_crop, None, fx=1.0, fy = 1.0))
-    #cv2.waitKey()
-    #cv2.destroyAllWindows() 
-
     return mesa_mun_dep,mesa_crop,0,coords
 
 def getImpugnacionesData(img, d, scale):
@@ -750,11 +835,10 @@ def getPapeletasRecibidas(img, d, model,scale):
     """
     Obtener el total de papeletas recibidas
     """
-    coords, success = GetBoundingBoxPapeletas(d)
+    coords, success = GetBoundingBox(d, -200, 350, -70, 20)
     coords = coords*(1.0/scale)
     (px, py, pw, ph) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
     papeletas_crop = img[py:py+ph, px:px+pw]
-
 
     gray = cv2.cvtColor(papeletas_crop.copy(), cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray.copy(), 50, 200, 5)
@@ -762,15 +846,19 @@ def getPapeletasRecibidas(img, d, model,scale):
     rects = ExtractRectangles(edges)
     rects = sorted(rects, key = (lambda x: x[2]*x[3]), reverse = True)
 
+    # If the digits appear inside the box
     (dx, dy, dw, dh) = rects[0]
     digits_crop = papeletas_crop[ dy:dy+dh, dx:dx+dw ]
     gray = cv2.cvtColor(digits_crop.copy(), cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray.copy(), 50, 200, 5)
-    #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
     rects = ExtractRectangles(edges, type_flag = cv2.RETR_LIST)
+
+
     (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects, h_min = 20, w_min = 15)
     #cleaned_rects = sorted(cleaned_rects, key = (lambda x: x[2]*x[3]), reverse = True)[0:3]
     #cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = removeChildrenRects(cleaned_rects)  
+
+
 
     ntotales=1
     ndigitos=3
@@ -803,7 +891,9 @@ def getPapeletasRecibidas(img, d, model,scale):
 def processActa(img , model):
     """
     """
-    problem = False
+
+    data = {}
+
     image, success, scale = FindResize(img.copy(), dw, dh)
     d = OCR(image.copy())
 
@@ -811,6 +901,18 @@ def processActa(img , model):
     mesa_data, mesa_img, mesa_problem, mcoords = getMesaData(img.copy(),d, scale)
     #impug_data, impug_img, impug_problem, icoords = getImpugnacionesData(img.copy(),d, scale)
     papel_data, papel_img, papel_problem, pcoords = getPapeletasRecibidas(img.copy(), d, model, scale)
+
+    data['partidoa'] = totales[0]
+    data['partidob'] = totales[1]
+    data['validos'] = totales[2]
+    data['nulos'] = totales[3]
+    data['blancos'] = totales[4]
+    data['emitidos'] = totales[5]
+    data['invalidos'] = totales[6]
+    data['mesa'] = mesa_data[0]
+    data['municipio'] = mesa_data[1]
+    data['departamento'] = mesa_data[2]
+    data['papeletas_recibidas'] = papel_data[0]
 
 
     tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
@@ -824,12 +926,12 @@ def processActa(img , model):
 
 
     problem = 1
-    return 0, img, problem
+    return data, img, problem
 
 if __name__ == '__main__':
 
-    args = build_arg_parser()
     actas_dir = './datasets/2davuelta/no_cuadro/'
+    actas_dir_primera = './actas_original/presi_vice/'
     actas_filenames = os.listdir(actas_dir)[:]
 
     model = loadPytorchModel()
@@ -840,7 +942,7 @@ if __name__ == '__main__':
         print("Imagen {}: {}".format(i,file))
         original = cv2.imread(actas_dir + file)
 
-        totales, img_with_data, problem = processActa(original.copy(), model)
+        data, img_with_data, problem = processActa(original.copy(), model)
 
         if problem < 0:
             if (problem == -1):
@@ -850,9 +952,16 @@ if __name__ == '__main__':
             else:
                 print("No existe este codigo de problem.")
         else:
-            print (totales)
-            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.5, fy = 0.5))
-            cv2.imwrite(out_image_save_path+'result_small_'+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
+            json_data = {}
+            for key in data.keys():
+                json_data[key] = str(data[key])
+            print(json_data)
+            json_name = file.split('.')[0] + '.json'
+            #with open(out_json_save_path + json_name, 'x') as json_file:
+                #json.dump(json_data, json_file)
+
+            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.25, fy = 0.25))
+            cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
             cv2.waitKey()
             cv2.destroyAllWindows()        
         
@@ -873,9 +982,13 @@ if __name__ == '__main__':
 
 
 
-    bbox = np.mean(coords, axis = 0)
-    (x, y, w, h) = (int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3]))
+    coords = np.mean(coords, axis = 0)
+    (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
     img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    cv2.imshow('fig',img)
+    cv2.waitKey()
+    cv2.destroyAllWindows()
 """
 
 # TODO
@@ -883,3 +996,4 @@ if __name__ == '__main__':
 # -Remover el recuadro que encierra a los digitos. Tiene un efecto negativo en la prediccion
 # -Anadir numeros testados al dataset para aunque sea indicar que un humano debe revisar el acta
 # - Definir codigos para cada tipo de problema
+# - Hacer algo como Non Minimum Max Supression en lugar de removeChildrenRects
