@@ -9,6 +9,13 @@ from fuzzywuzzy import fuzz
 from sklearn.cluster import KMeans
 
 import pandas as pd
+import json
+
+
+out_json_save_path = "./datasets/gtmnist/"
+
+if not os.path.exists(out_json_save_path):
+    os.mkdir(out_json_save_path)
 
 
 
@@ -36,13 +43,37 @@ class DigitExtractor():
         d = self.OCR(image.copy())
 
         cleaned_rects, totals_lbl, digit_lbl, coords = self.getDigitRectangles(img.copy(), d, scale)
-
         tx, ty, tw, th = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+
+        #for i , rect in enumerate(cleaned_rects):
+        #    x,y,w,h = rect
+        #    cleaned_rects[i] = (tx + x, ty + y, w, h)
+
+        
+        cifras = []
+        for i in range((max(totals_lbl)+1)):
+            cifras.append(np.zeros((self.output_size, self.output_size, 3)))
+
         for i , rect in enumerate(cleaned_rects):
             x,y,w,h = self.resizeRect(rect, 1.2, img.shape)
-            cleaned_rects[i] = (tx + x, ty + y, w, h)
+            #cleaned_rects[i] = (tx + x, ty + y, w, h)
+            digit_crop = img[ty + y: ty + y + h, tx + x: tx + x + w]
 
-        return cleaned_rects, totals_lbl, digit_lbl
+            roi = cv2.cvtColor(digit_crop, cv2.COLOR_BGR2GRAY)
+            ret, roi = cv2.threshold(roi, 90, 255, cv2.THRESH_BINARY_INV)
+            roi = cv2.resize(roi, (self.output_size, self.output_size), interpolation=cv2.INTER_AREA)
+
+            cifra = cifras[totals_lbl[i]]
+            cifra[:,:,digit_lbl[i]] = roi
+            cifras[totals_lbl[i]] = cifra
+
+            #print("Cifra: {}, digit: {}".format(totals_lbl[i], digit_lbl[i]))
+            #cv2.imshow('fig',cv2.resize(roi, None, fx=1, fy = 1))
+            #cv2.waitKey()
+            #cv2.destroyAllWindows()  
+        
+        return cifras
+        #return cleaned_rects, totals_lbl, digit_lbl
 
     def resizeRect(self, rect, scale, imgshape):
         """
@@ -388,22 +419,42 @@ def main():
     lbl_extractor = LabelExtractor()
 
     actas_dir = './datasets/2davuelta/sim/'
-    actas_filenames = os.listdir(actas_dir)[:10]
+    actas_filenames = os.listdir(actas_dir)[:2]
 
     labels_dir = './datasets/2davuelta/sim_actas_data.xlsx'
     columns = ['RECIBIDAS','PARTIDOA', 'PARTIDOB', 'VALIDOS', 'NULOS', 'BLANCOS', 'EMITIDOS', 'INVALIDOS']
     df = pd.read_excel(labels_dir, index_col = 0)
     df.columns = columns
 
+    dataset = {}
     for i, file in enumerate(actas_filenames):
         print("Imagen {}: {}".format(i,file))
         image = cv2.imread(actas_dir + file)
-        cleaned_rects, totals_lbl, digit_lbl = extractor.processarActa(image.copy())
+        #cleaned_rects, totals_lbl, digit_lbl = extractor.processarActa(image.copy())
+        cifras = extractor.processarActa(image.copy())
 
         image_no = int(file.split('.')[0]) 
         labels = lbl_extractor.processLabels(df, image_no)
-        print(labels)
+        #print(labels)
+        
+        for i, cifra in enumerate(cifras):
+            data = {}
+            for channel in range(3):
+                data['image'] = cifra[:,:,channel].tolist()
+                data['label'] = str(labels[i][-1*channel + 2])
+                dataset[str(image_no)+'_'+str(i)+'_'+str(channel)] = data
 
+                #print("Cifra: {}, digit: {}, data {}".format(i, channel, labels[i][-1*channel + 2]))
+                #cv2.imshow('fig',cv2.resize(cifra[:,:,channel], None, fx=1, fy = 1))
+                #cv2.waitKey()
+                #cv2.destroyAllWindows() 
+
+    json_name="gtmnist.json"
+    with open(out_json_save_path + json_name, 'x') as json_file:
+        json.dump(dataset, json_file)
+
+
+        """
         for i , rect in enumerate(cleaned_rects):
             x, y, w, h = rect
             image = cv2.rectangle(image,(x,  y),( x + w,  y + h),(0, 255, 0),3)
@@ -413,7 +464,7 @@ def main():
         cv2.imshow('fig',cv2.resize(image, None, fx=0.25, fy = 0.25))
         cv2.waitKey()
         cv2.destroyAllWindows()  
-        
+        """
 
 if __name__ == '__main__':
     main()
