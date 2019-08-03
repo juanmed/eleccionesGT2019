@@ -418,8 +418,8 @@ def main():
     extractor = DigitExtractor()
     lbl_extractor = LabelExtractor()
 
-    actas_dir = './datasets/2davuelta/sim/'
-    actas_filenames = os.listdir(actas_dir)[:2]
+    actas_dir = './datasets/2davuelta/digit_extraction/'
+    actas_filenames = os.listdir(actas_dir)[:]
 
     labels_dir = './datasets/2davuelta/sim_actas_data.xlsx'
     columns = ['RECIBIDAS','PARTIDOA', 'PARTIDOB', 'VALIDOS', 'NULOS', 'BLANCOS', 'EMITIDOS', 'INVALIDOS']
@@ -431,22 +431,25 @@ def main():
         print("Imagen {}: {}".format(i,file))
         image = cv2.imread(actas_dir + file)
         #cleaned_rects, totals_lbl, digit_lbl = extractor.processarActa(image.copy())
-        cifras = extractor.processarActa(image.copy())
+        try:
+            cifras = extractor.processarActa(image.copy())
 
-        image_no = int(file.split('.')[0]) 
-        labels = lbl_extractor.processLabels(df, image_no)
-        
-        for i, cifra in enumerate(cifras):
-            for channel in range(3):
-                data = {}
-                data['image'] = cifra[:,:,channel].tolist()
-                data['label'] = labels[i][-1*channel + 2]
-                dataset[str(image_no)+'_'+str(i)+'_'+str(channel)] = data
+            image_no = int(file.split('.')[0]) 
+            labels = lbl_extractor.processLabels(df, image_no)
+            
+            for i, cifra in enumerate(cifras):
+                for channel in range(3):
+                    data = {}
+                    data['image'] = cifra[:,:,channel].tolist()
+                    data['label'] = labels[i][-1*channel + 2]
+                    dataset[str(image_no)+'_'+str(i)+'_'+str(channel)] = data
 
-                print(" >>{}: Cifra: {}, digit: {}, data {}".format(str(image_no)+'_'+str(i)+'_'+str(channel), i, channel, labels[i][-1*channel + 2]))
-                #cv2.imshow('fig',cv2.resize(cifra[:,:,channel], None, fx=1, fy = 1))
-                #cv2.waitKey()
-                #cv2.destroyAllWindows() 
+                    #print(" >>{}: Cifra: {}, digit: {}, data {}".format(str(image_no)+'_'+str(i)+'_'+str(channel), i, channel, labels[i][-1*channel + 2]))
+                    #cv2.imshow('fig',cv2.resize(cifra[:,:,channel], None, fx=1, fy = 1))
+                    #cv2.waitKey()
+                    #cv2.destroyAllWindows() 
+        except:
+            print("Imagen {}: {} could not be resolved.".format(i,file))
 
     json_name="gtmnist.json"
     with open(out_json_save_path + json_name, 'x') as json_file:

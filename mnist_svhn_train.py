@@ -16,9 +16,11 @@ from models.lenet import LeNet
 from models.mnist_resnet import MNISTResNet
 import utils
 
+import json
+
 
 model_save_path = "./weights/"
-weight_file = "mnist_svhn_resnet_rand_"
+weight_file = "mnist_svhn_resnet_gtmnist_"
 if not os.path.exists(model_save_path):
     os.mkdir(model_save_path)
 
@@ -44,16 +46,26 @@ img_height = 2182
 
 class MNIST_SVHN_Dataset(torch.utils.data.Dataset):
 
-    def __init__(self, root = './datasets/', split = "train", mnist_transform = None, svhn_transform = None):
+    def __init__(self, root = './datasets/', split = "train", mnist_transform = None, svhn_transform = None, gtmnist_transform = None):
         """
         """
         self.mnist_transform = mnist_transform
         self.svhn_transform = svhn_transform
+        self.gtmnist_transform = gtmnist_transform
+        self.split = split
+
+        out_json_save_path = root + "gtmnist/"
+        json_name = "gtmnist.json"
 
         if (split == "train"):
             # obtener MNIST dataset
             self.mnist_data = torchvision.datasets.MNIST(root, train=True, download = True, transform = None)
             self.svhn_data = torchvision.datasets.SVHN(root, split='train', download = True, transform = None)
+
+            with open(out_json_save_path + json_name, 'r') as json_file:
+                self.gtmnist_data = json.load(json_file)
+                self.gtmnist_keys = list(self.gtmnist_data.keys())
+
 
         elif(split == "test"):
             self.mnist_data = torchvision.datasets.MNIST(root, train=False, download = True, transform = None)
@@ -72,13 +84,26 @@ class MNIST_SVHN_Dataset(torch.utils.data.Dataset):
                 img = self.mnist_transform(img)
         else:
             index = index - len(self.mnist_data)
-            img, target = self.svhn_data[index]
-            if self.svhn_transform is not None:
-                img = self.svhn_transform(img)
+            #img, target = self.svhn_data[index]
+            #if self.svhn_transform is not None:
+            #    img = self.svhn_transform(img)
+
+            key = self.gtmnist_keys[index]
+            img = np.array(self.gtmnist_data[key]['image'], dtype = np.uint8)
+            target = int(self.gtmnist_data[key]['label'])
+
+            if self.gtmnist_transform is not None:
+                img = self.gtmnist_transform(img)
+
         return img, target
 
     def __len__(self):
-        return len(self.mnist_data) #+ len(self.svhn_data)
+        if (self.split == 'train'):
+            return len(self.mnist_data) + len(self.gtmnist_data) #+ len(self.svhn_data)
+        elif(self.split == 'test'):
+            return len(self.mnist_data)
+        else:
+            return "No es un split valido"
 
 def train(modelo, dispositivo, train_loader, epoca, optimizador, criterion):
     """
@@ -192,7 +217,7 @@ def main():
             #transforms.ToPILImage(),
             transforms.Resize((img_size, img_size)),
             transforms.Grayscale(num_output_channels=1),
-            transforms.RandomAffine(degrees = 20, translate=(0.2,0.2)),
+            #transforms.RandomAffine(degrees = 20, translate=(0.2,0.2)),
             transforms.ToTensor(),
             transforms.Normalize((0.1307,),(0.3081,)),
             ##transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -205,8 +230,14 @@ def main():
             transforms.Normalize((0.5,),(0.5,))
         ])
         
+        gtmnist_transform = transforms.Compose([
+            transforms.ToPILImage(),
+            transforms.ToTensor(),
+            transforms.Normalize((0.5,),(0.5,)),
+            ])
+
         # obtener MNIST dataset
-        msd_train = MNIST_SVHN_Dataset(split = "train", mnist_transform = mnist_transform, svhn_transform = svhn_transform)
+        msd_train = MNIST_SVHN_Dataset(split = "train", mnist_transform = mnist_transform, svhn_transform = svhn_transform,  gtmnist_transform = gtmnist_transform)
         msd_test = MNIST_SVHN_Dataset(split = "test", mnist_transform = mnist_transform, svhn_transform = svhn_transform)
 
         # Cargar datasets
