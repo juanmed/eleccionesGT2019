@@ -9,6 +9,7 @@ json_name = "gtmnist.json"
 with open(out_json_save_path + json_name, 'r') as json_file:
     a = json.load(json_file)
 
+print("Hay {} imagenes".format(len(a.keys())))
 for key in a.keys():
     image = np.array(a[key]['image'])
     label = a[key]['label']

@@ -31,7 +31,7 @@ class DigitExtractor():
         self.ar_low = (1.0 - w)*ar
         self.ar_high = (1.0 +w)*ar
 
-        self.output_size = 28
+        self.output_size = 32
 
     def processarActa(self, img):
         """
@@ -435,16 +435,15 @@ def main():
 
         image_no = int(file.split('.')[0]) 
         labels = lbl_extractor.processLabels(df, image_no)
-        #print(labels)
         
         for i, cifra in enumerate(cifras):
-            data = {}
             for channel in range(3):
+                data = {}
                 data['image'] = cifra[:,:,channel].tolist()
-                data['label'] = str(labels[i][-1*channel + 2])
+                data['label'] = labels[i][-1*channel + 2]
                 dataset[str(image_no)+'_'+str(i)+'_'+str(channel)] = data
 
-                #print("Cifra: {}, digit: {}, data {}".format(i, channel, labels[i][-1*channel + 2]))
+                print(" >>{}: Cifra: {}, digit: {}, data {}".format(str(image_no)+'_'+str(i)+'_'+str(channel), i, channel, labels[i][-1*channel + 2]))
                 #cv2.imshow('fig',cv2.resize(cifra[:,:,channel], None, fx=1, fy = 1))
                 #cv2.waitKey()
                 #cv2.destroyAllWindows() 
