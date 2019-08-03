@@ -5,12 +5,18 @@ Este proyecto utiliza algoritmos de inteligencia artificial y visión por comput
 El flujo es sencillo: se obtiene un acta, se localizan las areas de interés, se extrae la(s) cantidad(es) de interés en cada área, y se genera un reporte (en formato .json).
 
 TODO:
-[] Expandir el dataset MNIST con digitos de actas de la primera vuelta y digitos testados.
-[] Reconocer el área de Impugnaciones, detectar si las hubo, y el total de impugnaciones.
-[] Definir tipos de errores en procesamiento.
-[] Calibrar los algoritmos de extracción de datos.
-[] Hacer pruebas de precisión con actas de prueba.
-[] Preparar para recibir data de la página del TSE y fotos de actas y el trabajo de procesamiento esos días.
+-[] Expandir el dataset MNIST con digitos de actas de la primera vuelta y digitos testados.
+
+-[] Reconocer el área de Impugnaciones, detectar si las hubo, y el total de impugnaciones.
+
+-[] Definir tipos de errores en procesamiento.
+
+-[] Calibrar los algoritmos de extracción de datos.
+
+-[] Hacer pruebas de precisión con actas de prueba.
+
+-[] Preparar para recibir data de la página del TSE y fotos de actas y el trabajo de procesamiento esos días.
+
 
 ![alt tag](https://github.com/juanmed/eleccionesGT2019/blob/master/content/result_small_303.jpg)
 
