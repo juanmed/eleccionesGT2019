@@ -21,7 +21,7 @@ import params
 
 
 model_save_path = "./weights/"
-weight_file = "mnist_svhn_resnet_rand_"
+weight_file = "mnist_svhn_resnet_gtmnist_"
 out_image_save_path = "./output/images/"
 out_json_save_path = "./output/json/"
 if not os.path.exists(out_image_save_path):
@@ -722,9 +722,9 @@ def loadPytorchModel():
     model = MNISTResNet()
 
     # load weights and state
-    checkpoint = torch.load(model_save_path+weight_file+"030.pt", map_location='cpu')
+    checkpoint = torch.load(model_save_path+weight_file+"180.pt", map_location='cpu')
     model.load_state_dict(checkpoint['model'])
-    print("Loaded {}".format(model_save_path+weight_file+"030.pt"))
+    print("Loaded {}".format(model_save_path+weight_file+"180.pt"))
     return model 
 
 def loadKerasModel():
@@ -776,6 +776,14 @@ def getVotosData(img,d, model, scale):
     else:
         print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
         return 0,0,-2,0
+
+    totals_problem, tdist = bad_cluster(totals_mean, avg_h//2)
+    digits_problem, ddist = bad_cluster(digit_mean, avg_w//2)
+    if( totals_problem or digits_problem):
+        print("Bad Clustering in totales: {}  digits: {}".format(totals_problem, digits_problem))
+        #print("Totales dist: {} digits dist: {}".format(tdist, ddist))
+        #print("avg height: {} avg widht: {}".format(avg_h, avg_w))
+        return 0,0,-3,0, 
 
     cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
     totales, img_totales = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
@@ -928,43 +936,68 @@ def processActa(img , model):
     problem = 1
     return data, img, problem
 
+def bad_cluster(means, threshold):
+    """
+    """
+    min_dist = 2000
+    means = np.sort(means).tolist()
+    for i in range(len(means)-1):
+        dist = means[i + 1] - means[i]
+        if(dist < min_dist):
+            min_dist = dist
+
+    if(min_dist <= threshold):
+        return True, min_dist
+    else:
+        return False, min_dist
+
 if __name__ == '__main__':
 
-    actas_dir = './datasets/2davuelta/no_cuadro/'
+    actas_dir = './datasets/2davuelta/sim/'
     actas_dir_primera = './actas_original/presi_vice/'
     actas_filenames = os.listdir(actas_dir)[:]
 
     model = loadPytorchModel()
     #model = loadKerasModel()
-
+    times = []
+    success = 0
     for i, file in enumerate(actas_filenames):
 
         print("Imagen {}: {}".format(i,file))
         original = cv2.imread(actas_dir + file)
+        try:
+            t1 = time.time()
+            data, img_with_data, problem = processActa(original.copy(), model)
+            t2 = time.time()
 
-        data, img_with_data, problem = processActa(original.copy(), model)
-
-        if problem < 0:
-            if (problem == -1):
-                print(" >> No se reconocion la cantidad esperada de totales")
-            elif(problem == -2):
-                print(" >> No se encontro la cantidad esperada de digitos")
+            times.append(t2 - t1)
+            
+            if problem < 0:
+                if (problem == -1):
+                    print(" >> No se reconocion la cantidad esperada de totales")
+                elif(problem == -2):
+                    print(" >> No se encontro la cantidad esperada de digitos")
+                else:
+                    print("No existe este codigo de problem.")
             else:
-                print("No existe este codigo de problem.")
-        else:
-            json_data = {}
-            for key in data.keys():
-                json_data[key] = str(data[key])
-            print(json_data)
-            json_name = file.split('.')[0] + '.json'
-            #with open(out_json_save_path + json_name, 'x') as json_file:
-                #json.dump(json_data, json_file)
+                json_data = {}
+                for key in data.keys():
+                    json_data[key] = str(data[key])
+                #print(json_data)
+                json_name = file.split('.')[0] + '.json'
+                with open(out_json_save_path + json_name, 'x') as json_file:
+                    json.dump(json_data, json_file)
 
-            cv2.imshow('fig',cv2.resize(img_with_data, None, fx=0.25, fy = 0.25))
-            cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
-            cv2.waitKey()
-            cv2.destroyAllWindows()        
-        
+                #cv2.imshow('fig',cv2.resize(img_with_data, None, fx=1.0, fy = 1.0))
+                #cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
+                #cv2.waitKey()
+                #cv2.destroyAllWindows() 
+                success = success+1
+        except:
+            print("  >> Could not process this image.")  
+
+    print("Processing time: {:.3f}s avg, {:.3f}s std, {:.3f}s max, {:.3f}s min".format(np.mean(times), np.std(times), np.max(times), np.min(times)))     
+    print("Succesfully processed: {}, ({:.2f}%)".format(success, 100*success/len(actas_filenames)))
 
 """
 

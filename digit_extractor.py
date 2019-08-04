@@ -35,44 +35,46 @@ class DigitExtractor():
 
     def processarActa(self, img):
         """
-        Extraer los digitos y sus etiquetas y almacenarlos.
+        Extraer los digitos y almacenarlos 
         """
         success = True
 
         image, success, scale = self.FindResize(img.copy(), self.max_size)
-        d = self.OCR(image.copy())
+        d = self.OCR(img.copy())
 
-        cleaned_rects, totals_lbl, digit_lbl, coords = self.getDigitRectangles(img.copy(), d, scale)
-        tx, ty, tw, th = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
-
-        #for i , rect in enumerate(cleaned_rects):
-        #    x,y,w,h = rect
-        #    cleaned_rects[i] = (tx + x, ty + y, w, h)
-
+        cleaned_rects, totals_lbl, digit_lbl, coords, problem = self.getDigitRectangles(img.copy(), d, 1.0)
         
         cifras = []
-        for i in range((max(totals_lbl)+1)):
-            cifras.append(np.zeros((self.output_size, self.output_size, 3)))
+        if problem > 0:
+            tx, ty, tw, th = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
 
-        for i , rect in enumerate(cleaned_rects):
-            x,y,w,h = self.resizeRect(rect, 1.2, img.shape)
-            #cleaned_rects[i] = (tx + x, ty + y, w, h)
-            digit_crop = img[ty + y: ty + y + h, tx + x: tx + x + w]
+            #for i , rect in enumerate(cleaned_rects):
+            #    x,y,w,h = rect
+            #    cleaned_rects[i] = (tx + x, ty + y, w, h)
 
-            roi = cv2.cvtColor(digit_crop, cv2.COLOR_BGR2GRAY)
-            ret, roi = cv2.threshold(roi, 90, 255, cv2.THRESH_BINARY_INV)
-            roi = cv2.resize(roi, (self.output_size, self.output_size), interpolation=cv2.INTER_AREA)
+            
+            for i in range((max(totals_lbl)+1)):
+                cifras.append(np.zeros((self.output_size, self.output_size, 3)))
 
-            cifra = cifras[totals_lbl[i]]
-            cifra[:,:,digit_lbl[i]] = roi
-            cifras[totals_lbl[i]] = cifra
+            for i , rect in enumerate(cleaned_rects):
+                x,y,w,h = self.resizeRect(rect, 1.2, img.shape)
+                #cleaned_rects[i] = (tx + x, ty + y, w, h)
+                digit_crop = img[ty + y: ty + y + h, tx + x: tx + x + w]
 
-            #print("Cifra: {}, digit: {}".format(totals_lbl[i], digit_lbl[i]))
-            #cv2.imshow('fig',cv2.resize(roi, None, fx=1, fy = 1))
-            #cv2.waitKey()
-            #cv2.destroyAllWindows()  
+                roi = cv2.cvtColor(digit_crop, cv2.COLOR_BGR2GRAY)
+                ret, roi = cv2.threshold(roi, 90, 255, cv2.THRESH_BINARY_INV)
+                roi = cv2.resize(roi, (self.output_size, self.output_size), interpolation=cv2.INTER_AREA)
+
+                cifra = cifras[totals_lbl[i]]
+                cifra[:,:,digit_lbl[i]] = roi
+                cifras[totals_lbl[i]] = cifra
+
+                #print("Cifra: {}, digit: {}".format(totals_lbl[i], digit_lbl[i]))
+                #cv2.imshow('fig',cv2.resize(roi, None, fx=1, fy = 1))
+                #cv2.waitKey()
+                #cv2.destroyAllWindows()  
         
-        return cifras
+        return cifras, problem
         #return cleaned_rects, totals_lbl, digit_lbl
 
     def resizeRect(self, rect, scale, imgshape):
@@ -91,38 +93,82 @@ class DigitExtractor():
         return (x, y, leng, leng)
 
     def getDigitRectangles(self, img, d, scale):
-        problem = False
+        problem = 1
         coords, success = self.GetBoundingBoxTotales(d)#, 25, 470, 205, 125)
         coords = coords*(1.0/scale)
+
+        """
+        img_temp = img.copy()
+        
+        for j, coor in enumerate(coords):
+            (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
+            if success:
+                c1 = np.random.randint(0,256)
+                c2 = np.random.randint(0,256)
+                c3 = np.random.randint(0,256)
+                img_temp = cv2.rectangle(img_temp,(x, y),(x + w, y + h),(c1, c2, c3),3)
+                img_temp = cv2.putText(img_temp,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
+            else:
+                img_temp = cv2.rectangle(img_temp,(x,y),(x + w, y + h),(0,0,255),3)
+        
+        #coords = np.mean(coords, axis = 0)
+        #print(coords)
+        (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+        img_temp = cv2.rectangle(img_temp, (x, y), (x + w, y + h), (0, 255, 0), 2)
+        
+        cv2.imshow('fig',cv2.resize(img_temp, None, fx=0.25, fy = 0.25))
+        cv2.waitKey()
+        cv2.destroyAllWindows()
+        """
 
         (tx, ty, tw, th) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
         totales_crop = img[ty:ty+th, tx:tx+tw]
         
         gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
         edges = cv2.Canny(gray.copy(), 50, 200, 5)
-        #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
+        #ret, edges = cv2.threshold(gray.copy(), 90, 255, cv2.THRESH_BINARY_INV)
         rects = self.ExtractRectangles(edges)
         (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = self.CleanRectangles(rects)
         cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = self.removeChildrenRects(cleaned_rects)
 
-        ntotales=7
-        ndigitos=3
+                        #  2da vuelta     PresiVice 1era vuelta 
+        ntotales=19     #     7                      19
+        ndigitos=3      #     3                       3
         if (len(cleaned_rects_vcenter)>ntotales):
             totals_lbl,totals_mean=self.GetLabels(cleaned_rects_vcenter,ntotales)
         else:
             print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
-            return 0,0,-1,0
+            return 0,0,-1,0, -1
         
         if (len(cleaned_rects_vcenter)>ntotales):
             digit_lbl,digit_mean=self.GetLabels(cleaned_rects_hcenter,ndigitos)
             digit_lbl = [-1*lbl+2 for lbl in digit_lbl]  # convertir digit_lbl a las correctas potencias de 10
         else:
             print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
-            return 0,0,-2,0
+            return 0,0,-2,0, -2
+
+        totals_problem, tdist = self.bad_cluster(totals_mean, avg_h//2)
+        digits_problem, ddist = self.bad_cluster(digit_mean, avg_w//2)
+        if( totals_problem or digits_problem):
+            print("Bad Clustering in totales: {}  digits: {}".format(totals_problem, digits_problem))
+            #print("Totales dist: {} digits dist: {}".format(tdist, ddist))
+            #print("avg height: {} avg widht: {}".format(avg_h, avg_w))
+            return 0,0,-1,0, -3
 
         cleaned_rects, totals_lbl, digit_lbl = self.GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)        
 
-        return cleaned_rects, totals_lbl, digit_lbl, coords
+        
+        for i , rect in enumerate(cleaned_rects):
+            x, y, w, h = rect
+            totales_crop = cv2.rectangle(totales_crop,(x,  y),( x + w,  y + h),(0, 255, 0),3)
+            totales_crop = cv2.putText(totales_crop, str(digit_lbl[i]), (x , y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
+            totales_crop = cv2.putText(totales_crop, str(totals_lbl[i]), ( 10 , y), cv2.FONT_HERSHEY_SIMPLEX, 2,(255,0,0),2,cv2.LINE_AA)
+
+        cv2.imshow('fig',cv2.resize(totales_crop, None, fx=0.5, fy = 0.5))
+        cv2.waitKey()
+        cv2.destroyAllWindows()  
+        
+        return cleaned_rects, totals_lbl, digit_lbl, coords, problem
 
     def GetLabels(self, data,nclust):
         """
@@ -224,14 +270,15 @@ class DigitExtractor():
         for j, rect in enumerate(rects):
             # Draw the rectangles
             if (( h_min <= rect[3] <= h_max) and ( w_min <= rect[2] <= w_max)):
+                #print(j,"accepted")
                 cleaned_rects.append(rect)
                 cleaned_rects_vcenter.append(rect[1] + rect[3]//2)
                 cleaned_rects_hcenter.append(rect[0] + rect[2]//2)
                 widths.append(rect[2])
                 heights.append(rect[3])
         #print(widths)
-        mean_width = int(np.mean(widths))
-        mean_heigth = int(np.mean(heights))
+        mean_width = int(np.mean(widths)) + 3*int(np.std(widths))
+        mean_heigth = int(np.mean(heights)) + 3*int(np.std(heights))
         cleaned_rects_vcenter=np.array(cleaned_rects_vcenter).reshape(-1,1)
         cleaned_rects_hcenter=np.array(cleaned_rects_hcenter).reshape(-1,1)
         return (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, mean_width, mean_heigth)
@@ -241,20 +288,20 @@ class DigitExtractor():
         """
         keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']# , 'PARTIDOA', 'PARTIDOB']
 
-        # default values
-        x = 350#225
-        y = 650
-        w = 240
-        h = 530 
-
-        t1_x_offset = 5        #25
-        t1_y_offset = 450       #470
-        t2_x_offset = 185       #205
-        t2_y_offset = 105       #125
+        # default values   with resizing        no resizing
+        x = 351         #     371                   371
+        y = 705         #     715                   715
+        w = 280         #     260                   260
+        h = 1250         #     850                   1230
+                                #    2da vuelta    1era vuelta
+        t1_x_offset = -90         #       5
+        t1_y_offset = 450       #       450
+        t2_x_offset = 45       #       185
+        t2_y_offset = 105       #       105
 
         coord = []
-
-        idx, words = self.GetKeywordIndex(d, keywords)
+        idx = []
+        #idx, words = self.GetKeywordIndex(d, keywords)
         success = False
         if len(idx) == 2:
             t1_x = d['left'][idx[0]]
@@ -400,6 +447,25 @@ class DigitExtractor():
         #return cv2.resize(img, (dw, dh), interpolation = cv2.INTER_AREA), success 
         return img, success, scale
 
+    def bad_cluster(self, means, threshold):
+        """
+        """
+        min_dist = 2000
+        means = np.sort(means).tolist()
+        for i in range(len(means)-1):
+            dist = means[i + 1] - means[i]
+            if(dist < min_dist):
+                min_dist = dist
+
+        if(min_dist <= threshold):
+            return True, min_dist
+        else:
+            return False, min_dist
+
+
+
+
+
 class LabelExtractor():
 
     def __init__(self):
@@ -413,12 +479,100 @@ class LabelExtractor():
             labels.append("{:03d}".format(df.loc[acta][field]))
         return labels
 
+class LabelExtractor2():
+
+    def __init__(self):
+        """
+        Usando data proveida amablemente por Leonel Aguilar desde su repositorio
+        https://github.com/juanmed/election_count_helper
+        """
+        self.a = 0
+        save_dir = './datasets/1eravuelta/'
+        """
+        Run this only the first time
+
+        data_dir1 = save_dir+'Batch_3693041_batch_results.csv'
+        data_dir2 = save_dir+'Batch_3693194_batch_results.csv'
+
+        self.df1=pd.read_csv(data_dir1, sep=',')
+        self.df1=self.df1[['Input.imgName','Answer.IsDifficult.difficult','Answer.tagA01','Answer.tagA02','Answer.tagA03','Answer.tagA04','Answer.tagA05','Answer.tagA06','Answer.tagA07','Answer.tagA08','Answer.tagA09','Answer.tagA10','Answer.tagA11','Answer.tagA12','Answer.tagA13','Answer.tagA14','Answer.tagA15','Answer.tagA16','Answer.tagA17','Answer.tagA18','Answer.tagA19','Answer.tagA20','Answer.tagA21','Answer.tagA22','Answer.tagA23','Answer.tagA24']]
+        self.df1.columns = ['name','difficult','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24']       
+        self.df1 = self.df1.groupby('name').agg(self.aggFunc).reset_index().copy(deep=True)
+        self.df1['mesa'] = self.df1['name'].str[:5]
+        self.df1['acta'] = self.df1['name'].str[-5]
+        self.df1 = self.df1[['mesa','acta','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24']]
+        self.df1 = self.df1.astype(int)
+
+
+        self.df2=pd.read_csv(data_dir2, sep=',')
+        self.df2=self.df2[['Input.imgName','Answer.IsDifficult.difficult','Answer.tagA01','Answer.tagA02','Answer.tagA03','Answer.tagA04','Answer.tagA05','Answer.tagA06','Answer.tagA07','Answer.tagA08','Answer.tagA09','Answer.tagA10','Answer.tagA11','Answer.tagA12','Answer.tagA13','Answer.tagA14','Answer.tagA15','Answer.tagA16','Answer.tagA17','Answer.tagA18','Answer.tagA19','Answer.tagA20','Answer.tagA21','Answer.tagA22','Answer.tagA23','Answer.tagA24']]
+        self.df2.columns = ['name','difficult','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24']       
+        self.df2 = self.df2.groupby('name').agg(self.aggFunc).reset_index().copy(deep=True)
+        self.df2['mesa'] = self.df2['name'].str[:5]
+        self.df2['acta'] = self.df2['name'].str[-5]
+        self.df2 = self.df2[['mesa','acta','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24']]
+        self.df2 = self.df2.astype(int)
+
+        self.df1.to_csv(save_dir + '3693041.csv', sep = ',')
+        self.df2.to_csv(save_dir + '3693194.csv', sep = ',')
+        """
+        self.df1 = pd.read_csv(save_dir + '3693041.csv', sep = ',', header = 0, index_col = 0)
+        self.df2 = pd.read_csv(save_dir + '3693194.csv', sep = ',', header = 0, index_col = 0)
+        self.df1 = self.df1.set_index('mesa')
+        self.df2 = self.df2.set_index('mesa')
+        self.df1 = self.df1[self.df1['acta'] == 1]
+        self.df2 = self.df2[self.df2['acta'] == 1]
+
+        #print(self.df1.loc[1])
+        #print("Mesas: {}\n".format(len(self.df1)),self.df1.head())
+        #print("Mesas: {}\n".format(len(self.df2)),self.df2.head())
+
+
+
+    def processLabels(self, acta):
+        """
+        """
+        labels = []
+
+        columns = 19
+
+        success = False
+        try:
+            totals = self.df1.loc[acta]
+            success = True
+        except:
+            try:
+                totals = self.df2.loc[acta]
+                success = True
+            except:
+                success = False
+
+        if success:
+            for i in range(19):
+                total = totals[str(i + 1)]
+                labels.append("{:03d}".format(total))
+
+        return labels
+
+    def aggFunc(self, series):
+        """
+        Obtenido de https://github.com/juanmed/election_count_helper
+        """
+        v=series.value_counts(dropna=False)
+        try:
+            if v.iloc[0]<2:
+                return -1
+            else:
+                return v.index[0]
+        except:
+            return -2
 
 def main():
     extractor = DigitExtractor()
     lbl_extractor = LabelExtractor()
+    lbl_extractor2 = LabelExtractor2()
 
-    actas_dir = './datasets/2davuelta/digit_extraction/'
+    actas_dir = './actas_original/presi_vice/'  #'./datasets/2davuelta/digit_extraction/'
     actas_filenames = os.listdir(actas_dir)[:]
 
     labels_dir = './datasets/2davuelta/sim_actas_data.xlsx'
@@ -426,17 +580,25 @@ def main():
     df = pd.read_excel(labels_dir, index_col = 0)
     df.columns = columns
 
+    
     dataset = {}
     for i, file in enumerate(actas_filenames):
         print("Imagen {}: {}".format(i,file))
         image = cv2.imread(actas_dir + file)
-        #cleaned_rects, totals_lbl, digit_lbl = extractor.processarActa(image.copy())
-        try:
-            cifras = extractor.processarActa(image.copy())
+        
+        #try:
 
-            image_no = int(file.split('.')[0]) 
-            labels = lbl_extractor.processLabels(df, image_no)
+        #image_no = int(file.split('.')[0]) 
+        image_no = int(file.split('.')[0][0:-1])  # extraer numero de mesa
+        labels = lbl_extractor2.processLabels(image_no)
+
+        #if(len(labels) != 0):
+        if(True):
             
+            #cleaned_rects, totals_lbl, digit_lbl = extractor.processarActa(image.copy())
+            cifras, problem = extractor.processarActa(image.copy())
+        
+            """
             for i, cifra in enumerate(cifras):
                 for channel in range(3):
                     data = {}
@@ -444,29 +606,34 @@ def main():
                     data['label'] = labels[i][-1*channel + 2]
                     dataset[str(image_no)+'_'+str(i)+'_'+str(channel)] = data
 
-                    #print(" >>{}: Cifra: {}, digit: {}, data {}".format(str(image_no)+'_'+str(i)+'_'+str(channel), i, channel, labels[i][-1*channel + 2]))
-                    #cv2.imshow('fig',cv2.resize(cifra[:,:,channel], None, fx=1, fy = 1))
-                    #cv2.waitKey()
-                    #cv2.destroyAllWindows() 
+                    print(" >>{}: Cifra: {}, digit: {}, data {}".format(str(image_no)+'_'+str(i)+'_'+str(channel), i, channel, labels[i][-1*channel + 2]))
+                    cv2.imshow('fig',cv2.resize(cifra[:,:,channel], None, fx=1, fy = 1))
+                    cv2.waitKey()
+                    cv2.destroyAllWindows() 
+            """
+        else:
+            continue
+    """ 
         except:
             print("Imagen {}: {} could not be resolved.".format(i,file))
+    """    
 
-    json_name="gtmnist.json"
-    with open(out_json_save_path + json_name, 'x') as json_file:
-        json.dump(dataset, json_file)
+    #json_name="gtmnist.json"
+    #with open(out_json_save_path + json_name, 'x') as json_file:
+    #    json.dump(dataset, json_file)
+    
 
+    """
+    for i , rect in enumerate(cleaned_rects):
+        x, y, w, h = rect
+        image = cv2.rectangle(image,(x,  y),( x + w,  y + h),(0, 255, 0),3)
+        image = cv2.putText(image, str(digit_lbl[i]), (x , y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
+        image = cv2.putText(image, str(labels[totals_lbl[i]]), ( 200 , y), cv2.FONT_HERSHEY_SIMPLEX, 2,(255,0,0),2,cv2.LINE_AA)
 
-        """
-        for i , rect in enumerate(cleaned_rects):
-            x, y, w, h = rect
-            image = cv2.rectangle(image,(x,  y),( x + w,  y + h),(0, 255, 0),3)
-            image = cv2.putText(image, str(digit_lbl[i]), (x , y), cv2.FONT_HERSHEY_SIMPLEX, 2,(0,0,255),2,cv2.LINE_AA)
-            image = cv2.putText(image, str(labels[totals_lbl[i]]), ( 200 , y), cv2.FONT_HERSHEY_SIMPLEX, 2,(255,0,0),2,cv2.LINE_AA)
-
-        cv2.imshow('fig',cv2.resize(image, None, fx=0.25, fy = 0.25))
-        cv2.waitKey()
-        cv2.destroyAllWindows()  
-        """
+    cv2.imshow('fig',cv2.resize(image, None, fx=0.25, fy = 0.25))
+    cv2.waitKey()
+    cv2.destroyAllWindows()  
+    """
 
 if __name__ == '__main__':
     main()

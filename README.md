@@ -5,6 +5,7 @@ Este proyecto utiliza algoritmos de inteligencia artificial y visión por comput
 El flujo es sencillo: se obtiene un acta, se localizan las areas de interés, se extrae la(s) cantidad(es) de interés en cada área, y se genera un reporte (en formato .json).
 
 TODO:
+
 -[] Expandir el dataset MNIST con digitos de actas de la primera vuelta y digitos testados.
 
 -[] Reconocer el área de Impugnaciones, detectar si las hubo, y el total de impugnaciones.
