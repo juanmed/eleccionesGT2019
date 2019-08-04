@@ -21,7 +21,7 @@ import params
 
 
 model_save_path = "./weights/"
-weight_file = "mnist_svhn_resnet_gtmnist_"
+weight_file = "mnist_svhn_resnet_"
 out_image_save_path = "./output/images/"
 out_json_save_path = "./output/json/"
 if not os.path.exists(out_image_save_path):
@@ -722,9 +722,9 @@ def loadPytorchModel():
     model = MNISTResNet()
 
     # load weights and state
-    checkpoint = torch.load(model_save_path+weight_file+"180.pt", map_location='cpu')
+    checkpoint = torch.load(model_save_path+weight_file+"rand_030.pt", map_location='cpu')
     model.load_state_dict(checkpoint['model'])
-    print("Loaded {}".format(model_save_path+weight_file+"180.pt"))
+    print("Loaded {}".format(model_save_path+weight_file+"rand_030.pt"))
     return model 
 
 def loadKerasModel():
@@ -766,6 +766,10 @@ def getVotosData(img,d, model, scale):
     ndigitos=3
     if (len(cleaned_rects_vcenter)>ntotales):
         totals_lbl,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
+        
+        if(len(np.unique(totals_mean)) != ntotales):
+            return 0,0,-1,0
+
     else:
         print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
         return 0,0,-1,0
@@ -773,6 +777,10 @@ def getVotosData(img,d, model, scale):
     if (len(cleaned_rects_vcenter)>ntotales):
         digit_lbl,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
         digit_lbl = [-1*lbl+2 for lbl in digit_lbl]  # convertir digit_lbl a las correctas potencias de 10
+
+        if(len(np.unique(digit_mean)) != ndigitos):
+            return 0,0,-2,0
+
     else:
         print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
         return 0,0,-2,0
@@ -830,9 +838,15 @@ def getMesaData(img, d, scale):
                 pass_next = False
 
     mesa_mun_dep =[int(ele[1]) for ele in mesa_data_raw]
-    for i, val in mesa_data_raw:
-        (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
-        mesa_crop = cv2.putText(mesa_crop, val, (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA)        
+    if(len(mesa_mun_dep) != 3):
+        # No se encontro la cantidad de campos esperada
+        return 0,0,-2,0
+    else:
+        for i, val in mesa_data_raw:
+            (x, y, w, h) = (d['left'][i], d['top'][i], d['width'][i], d['height'][i])
+            mesa_crop = cv2.putText(mesa_crop, val, (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA) 
+            mesa_crop = cv2.rectangle(mesa_crop,(x, y),(x + w, y + h),(0, 255, 0),3)
+
 
     return mesa_mun_dep,mesa_crop,0,coords
 
@@ -866,12 +880,14 @@ def getPapeletasRecibidas(img, d, model,scale):
     #cleaned_rects = sorted(cleaned_rects, key = (lambda x: x[2]*x[3]), reverse = True)[0:3]
     #cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = removeChildrenRects(cleaned_rects)  
 
-
-
     ntotales=1
     ndigitos=3
     if (len(cleaned_rects_vcenter)>ntotales):
         totals_lbl,totals_mean=GetLabels(cleaned_rects_vcenter,ntotales)
+        
+        if(len(np.unique(totals_mean)) != ntotales):
+            return 0,0,-1,0
+
     else:
         print(" >>Se esperan {} pero se encontraron {} totales".format(ntotales, len(cleaned_rects_vcenter)))
         return 0,0,-1,0
@@ -879,9 +895,20 @@ def getPapeletasRecibidas(img, d, model,scale):
     if (len(cleaned_rects_vcenter)>ntotales):
         digit_lbl,digit_mean=GetLabels(cleaned_rects_hcenter,ndigitos)
         digit_lbl = [-1*lbl+2 for lbl in digit_lbl]  # convertir digit_lbl a las correctas potencias de 10
+
+        if(len(np.unique(digit_mean)) != ndigitos):
+            return 0,0,-2,0
+
     else:
         print(" >> Se esperan {} pero se encontraron {} digitos".format(ndigitos, len(cleaned_rects_hcenter)))
         return 0,0,-2,0
+
+    digits_problem, ddist = bad_cluster(digit_mean, avg_w//2)
+    if(digits_problem):
+        print("Bad Clustering in totales: {}  digits: {}".format(totals_problem, digits_problem))
+        #print("Totales dist: {} digits dist: {}".format(tdist, ddist))
+        #print("avg height: {} avg widht: {}".format(avg_h, avg_w))
+        return 0,0,-3,0, 
 
     cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
     cleaned_rects = [(r[0]+dx, r[1]+dy, r[2], r[3]) for r in cleaned_rects ]
@@ -901,6 +928,7 @@ def processActa(img , model):
     """
 
     data = {}
+    problem = []
 
     image, success, scale = FindResize(img.copy(), dw, dh)
     d = OCR(image.copy())
@@ -910,30 +938,41 @@ def processActa(img , model):
     #impug_data, impug_img, impug_problem, icoords = getImpugnacionesData(img.copy(),d, scale)
     papel_data, papel_img, papel_problem, pcoords = getPapeletasRecibidas(img.copy(), d, model, scale)
 
-    data['partidoa'] = totales[0]
-    data['partidob'] = totales[1]
-    data['validos'] = totales[2]
-    data['nulos'] = totales[3]
-    data['blancos'] = totales[4]
-    data['emitidos'] = totales[5]
-    data['invalidos'] = totales[6]
-    data['mesa'] = mesa_data[0]
-    data['municipio'] = mesa_data[1]
-    data['departamento'] = mesa_data[2]
-    data['papeletas_recibidas'] = papel_data[0]
+    if(totales_problem < 0):
+        problem.append(totales_problem)
+    elif(mesa_problem < 0):
+        problem.append(mesa_problem)
+    elif(papel_problem < 0):
+        problem.append(papel_problem)
+    else:
+
+        data['partidoa'] = totales[0]
+        data['partidob'] = totales[1]
+        data['validos'] = totales[2]
+        data['nulos'] = totales[3]
+        data['blancos'] = totales[4]
+        data['emitidos'] = totales[5]
+        data['invalidos'] = totales[6]
+        data['mesa'] = mesa_data[0]
+        data['municipio'] = mesa_data[1]
+        data['departamento'] = mesa_data[2]
+        data['papeletas_recibidas'] = papel_data[0]
+        if (sum(totales) > papel_data[0]):
+            data['problemas'] = 'Cuenta de votos mayor a papeletas recibidas'
+        else:
+            data['problemas'] = ''
+
+        tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
+        img[ty:ty+th,tx:tx+tw] = totales_img
+        
+        mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
+        img[my:my+mh,mx:mx+mw] = mesa_img
+        
+        px,py,pw,ph = (int(pcoords[0]), int(pcoords[1]), int(pcoords[2]), int(pcoords[3]))
+        img[py:py+ph,px:px+pw] = papel_img
 
 
-    tx,ty,tw,th = (int(tcoords[0]), int(tcoords[1]), int(tcoords[2]), int(tcoords[3]))
-    img[ty:ty+th,tx:tx+tw] = totales_img
     
-    mx,my,mw,mh = (int(mcoords[0]), int(mcoords[1]), int(mcoords[2]), int(mcoords[3]))
-    img[my:my+mh,mx:mx+mw] = mesa_img
-    
-    px,py,pw,ph = (int(pcoords[0]), int(pcoords[1]), int(pcoords[2]), int(pcoords[3]))
-    img[py:py+ph,px:px+pw] = papel_img
-
-
-    problem = 1
     return data, img, problem
 
 def bad_cluster(means, threshold):
@@ -953,9 +992,13 @@ def bad_cluster(means, threshold):
 
 if __name__ == '__main__':
 
+    error_messages = ['No se reconocion la cantidad esperada de totales',
+                      'No se encontro la cantidad esperada de digitos',
+                      'No se logro separar los digitos adecuadamente']
+
     actas_dir = './datasets/2davuelta/sim/'
     actas_dir_primera = './actas_original/presi_vice/'
-    actas_filenames = os.listdir(actas_dir)[:]
+    actas_filenames = os.listdir(actas_dir)[:10]
 
     model = loadPytorchModel()
     #model = loadKerasModel()
@@ -972,31 +1015,30 @@ if __name__ == '__main__':
 
             times.append(t2 - t1)
             
-            if problem < 0:
-                if (problem == -1):
-                    print(" >> No se reconocion la cantidad esperada de totales")
-                elif(problem == -2):
-                    print(" >> No se encontro la cantidad esperada de digitos")
-                else:
-                    print("No existe este codigo de problem.")
+            if (len(problem)> 0):
+                for problem_code in problem:
+                    print(error_messages[np.abs(problem_code)-1])
+
             else:
                 json_data = {}
                 for key in data.keys():
                     json_data[key] = str(data[key])
                 #print(json_data)
                 json_name = file.split('.')[0] + '.json'
-                with open(out_json_save_path + json_name, 'x') as json_file:
+                with open(out_json_save_path + json_name, 'w') as json_file:
                     json.dump(json_data, json_file)
 
                 #cv2.imshow('fig',cv2.resize(img_with_data, None, fx=1.0, fy = 1.0))
-                #cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.4, fy = 0.4))
+                cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.5, fy = 0.5))
                 #cv2.waitKey()
                 #cv2.destroyAllWindows() 
                 success = success+1
+                
         except:
             print("  >> Could not process this image.")  
-
-    print("Processing time: {:.3f}s avg, {:.3f}s std, {:.3f}s max, {:.3f}s min".format(np.mean(times), np.std(times), np.max(times), np.min(times)))     
+        
+    if(len(times) > 0):
+        print("Processing time: {:.3f}s avg, {:.3f}s std, {:.3f}s max, {:.3f}s min".format(np.mean(times), np.std(times), np.max(times), np.min(times)))     
     print("Succesfully processed: {}, ({:.2f}%)".format(success, 100*success/len(actas_filenames)))
 
 """
