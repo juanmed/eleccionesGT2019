@@ -957,7 +957,7 @@ def processActa(img , model):
         data['municipio'] = mesa_data[1]
         data['departamento'] = mesa_data[2]
         data['papeletas_recibidas'] = papel_data[0]
-        if (sum(totales) > papel_data[0]):
+        if ((totales[0] + totales[1] + totales[3]+ totales[4] + totales[6]) > papel_data[0]):
             data['problemas'] = 'Cuenta de votos mayor a papeletas recibidas'
         else:
             data['problemas'] = ''
