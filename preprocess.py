@@ -165,17 +165,17 @@ def GetBoundingBox(d, t1_x_offset, t1_y_offset, t2_x_offset, t2_y_offset):
     keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']
 
     # default values
-    x = 350#225
-    y = 650
-    w = 320
-    h = 80 
+    x = 50#225
+    y = 370
+    w = 340
+    h = 90 
 
 
     coord = []
 
     idx, words = GetKeywordIndex(d, keywords)
     success = False
-    if len(idx) == 2:
+    if len(idx) == 3:
         t1_x = d['left'][idx[0]]
         t1_y = d['top'][idx[0]]
         t1_w = d['width'][idx[0]]
@@ -198,7 +198,7 @@ def GetBoundingBox(d, t1_x_offset, t1_y_offset, t2_x_offset, t2_y_offset):
         success = True
         #return coord, True
 
-    elif len(idx) == 1:
+    elif len(idx) == 4:
         
         word = d['text'][idx[0]]
         for i, keyword in enumerate(keywords):
@@ -334,7 +334,7 @@ def GetBoundingBoxMesa(d):
 
     # default values
     x = 350#225
-    y = 650
+    y = 75
     w = 200
     h = 100 
 
@@ -347,7 +347,7 @@ def GetBoundingBoxMesa(d):
 
     idx, words = GetKeywordIndex(d, keywords)
     success = False
-    if len(idx) == 2:
+    if len(idx) == 4:
         t1_x = d['left'][idx[0]]
         t1_y = d['top'][idx[0]]
         t1_w = d['width'][idx[0]]
@@ -370,7 +370,7 @@ def GetBoundingBoxMesa(d):
         success = True
         #return coord, True
 
-    elif len(idx) == 1:
+    elif len(idx) == 5:
         
         word = d['text'][idx[0]]
         for i, keyword in enumerate(keywords):
@@ -419,8 +419,8 @@ def GetBoundingBoxTotales(d):
     keywords = ['ACTAFINALCIERREYESCRUTINIOS', 'PRESIDENTEYVICEPRESIDENTE']# , 'PARTIDOA', 'PARTIDOB']
 
     # default values
-    x = 350#225
-    y = 650
+    x = 450#225
+    y = 500
     w = 240
     h = 530 
 
@@ -433,7 +433,7 @@ def GetBoundingBoxTotales(d):
 
     idx, words = GetKeywordIndex(d, keywords)
     success = False
-    if len(idx) == 2:
+    if len(idx) == 4:
         t1_x = d['left'][idx[0]]
         t1_y = d['top'][idx[0]]
         t1_w = d['width'][idx[0]]
@@ -460,7 +460,7 @@ def GetBoundingBoxTotales(d):
         success = True
         #return coord, True
 
-    elif len(idx) == 1:
+    elif len(idx) == 5:
         
         word = d['text'][idx[0]]
         for i, keyword in enumerate(keywords):
@@ -575,8 +575,8 @@ def CleanRectangles(rects, h_min=35, w_min=25, h_max = 75, w_max = 75):
             widths.append(rect[2])
             heights.append(rect[3])
     #print(widths)
-    mean_width = int(np.mean(widths))
-    mean_heigth = int(np.mean(heights))
+    mean_width = int(np.mean(widths)) + 3*int(np.std(widths))
+    mean_heigth = int(np.mean(heights)) + 3*int(np.std(heights))
     cleaned_rects_vcenter=np.array(cleaned_rects_vcenter).reshape(-1,1)
     cleaned_rects_hcenter=np.array(cleaned_rects_hcenter).reshape(-1,1)
     return (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, mean_width, mean_heigth)
@@ -752,14 +752,38 @@ def getVotosData(img,d, model, scale):
     coords, success = GetBoundingBoxTotales(d)#, 25, 470, 205, 125)
     coords = coords*(1.0/scale)
 
+    """
+    for j, coor in enumerate(coords):
+        (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
+        if success:
+            c1 = np.random.randint(0,256)
+            c2 = np.random.randint(0,256)
+            c3 = np.random.randint(0,256)
+            img = cv2.rectangle(img,(x, y),(x + w, y + h),(c1, c2, c3),3)
+            img = cv2.putText(img,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
+        else:
+            img = cv2.rectangle(img,(x,y),(x + w, y + h),(0,0,255),3)
+
+
+
+
+    coords = np.mean(coords, axis = 0)
+    (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    cv2.imshow('fig',cv2.resize(img, None, fx=.45, fy = 0.45))
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+    """
+
     (tx, ty, tw, th) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
     totales_crop = img[ty:ty+th, tx:tx+tw]
     
     gray = cv2.cvtColor(totales_crop.copy(), cv2.COLOR_BGR2GRAY)
     edges = cv2.Canny(gray.copy(), 50, 200, 5)
-    #ret, clean = cv2.threshold(gray.copy(), 0, 255, cv2.THRESH_OTSU)
+    #ret, edges = cv2.threshold(gray.copy(), 90, 255, cv2.THRESH_OTSU)
     rects = ExtractRectangles(edges)
-    (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects)
+    (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects, h_min = 15, w_min = 15)
     cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = removeChildrenRects(cleaned_rects)
 
     ntotales=7
@@ -795,6 +819,16 @@ def getVotosData(img,d, model, scale):
 
     cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
     totales, img_totales = GetNumericTotals(totales_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model)
+
+    """
+    for rect in cleaned_rects:
+        (x, y, w, h) = rect #rects[0]
+        cv2.rectangle(totales_crop, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    cv2.imshow('fig',cv2.resize(totales_crop, None, fx=1.0, fy = 1.0))
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+    """
     
     return totales, img_totales, problem, coords
 
@@ -807,6 +841,28 @@ def getMesaData(img, d, scale):
 
     coords, success = GetBoundingBoxMesa(d)#, 0, 60, 130, -270)
     coords = coords*(1.0/scale)
+
+    """
+    for j, coor in enumerate(coords):
+        (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
+        if success:
+            c1 = np.random.randint(0,256)
+            c2 = np.random.randint(0,256)
+            c3 = np.random.randint(0,256)
+            img = cv2.rectangle(img,(x, y),(x + w, y + h),(c1, c2, c3),3)
+            img = cv2.putText(img,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
+        else:
+            img = cv2.rectangle(img,(x,y),(x + w, y + h),(0,0,255),3)
+    
+    coords = np.mean(coords, axis = 0)
+    (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    cv2.imshow('fig',cv2.resize(img, None, fx=.45, fy = 0.45))
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+    """
+
     (mx, my, mw, mh) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
 
     mesa_crop = img[my:my+mh, mx:mx+mw]
@@ -821,15 +877,18 @@ def getMesaData(img, d, scale):
         else:
             # Si se detecto un elemento de 2 caracteres, seguro es uno de los valores
             if (len(element)) == 2:
-                mesa_data_raw.append((j,element))
+                if " " not in element:                      # verificar que no sean caracteres de espacio
+                    mesa_data_raw.append((j,element))
 
             # a veces se detectan los digitos por separado, intentar capturar 
             elif( len(element) == 1):
-                if( (j+1) != len(d['text'])):
-                    if (len(d['text'][j+1]) == 1):
+                if( (j+1) != len(d['text'])):               # verificar rango
+                    if (len(d['text'][j+1]) == 1):          # verificar que sea otro string con len = 1
+                        
                         val = element+d['text'][j+1]
-                        mesa_data_raw.append((j, val))
-                        pass_next = True
+                        if " " not in val:                  # verifiar que no sean caracteres espacio
+                            mesa_data_raw.append((j, val))
+                            pass_next = True
                     else:
                         continue
                 else:
@@ -847,6 +906,10 @@ def getMesaData(img, d, scale):
             mesa_crop = cv2.putText(mesa_crop, val, (x ,y), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,255),2,cv2.LINE_AA) 
             mesa_crop = cv2.rectangle(mesa_crop,(x, y),(x + w, y + h),(0, 255, 0),3)
 
+        #cv2.imshow('fig',cv2.resize(mesa_crop, None, fx=1.0, fy = 1.0))
+        #cv2.waitKey()
+        #cv2.destroyAllWindows()
+
 
     return mesa_mun_dep,mesa_crop,0,coords
 
@@ -859,6 +922,31 @@ def getPapeletasRecibidas(img, d, model,scale):
     """
     coords, success = GetBoundingBox(d, -200, 350, -70, 20)
     coords = coords*(1.0/scale)
+
+    """
+    for j, coor in enumerate(coords):
+        (x,y,w,h) = (int(coor[0]), int(coor[1]), int(coor[2]), int(coor[3]))
+        if success:
+            c1 = np.random.randint(0,256)
+            c2 = np.random.randint(0,256)
+            c3 = np.random.randint(0,256)
+            img = cv2.rectangle(img,(x, y),(x + w, y + h),(c1, c2, c3),3)
+            img = cv2.putText(img,str(j),(x+5, y+5), cv2.FONT_HERSHEY_SIMPLEX, 2,(c1, c2, c3), 2, cv2.LINE_AA)
+        else:
+            img = cv2.rectangle(img,(x,y),(x + w, y + h),(0,0,255),3)
+
+
+
+
+    coords = np.mean(coords, axis = 0)
+    (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
+    img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    cv2.imshow('fig',cv2.resize(img, None, fx=.45, fy = 0.45))
+    cv2.waitKey()
+    cv2.destroyAllWindows()
+    """
+
     (px, py, pw, ph) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
     papeletas_crop = img[py:py+ph, px:px+pw]
 
@@ -869,14 +957,14 @@ def getPapeletasRecibidas(img, d, model,scale):
     rects = sorted(rects, key = (lambda x: x[2]*x[3]), reverse = True)
 
     # If the digits appear inside the box
-    (dx, dy, dw, dh) = rects[0]
-    digits_crop = papeletas_crop[ dy:dy+dh, dx:dx+dw ]
-    gray = cv2.cvtColor(digits_crop.copy(), cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray.copy(), 50, 200, 5)
-    rects = ExtractRectangles(edges, type_flag = cv2.RETR_LIST)
+    #(dx, dy, dw, dh) = rects[0]
+    #digits_crop = papeletas_crop[ dy:dy+dh, dx:dx+dw ]
+    #gray = cv2.cvtColor(digits_crop.copy(), cv2.COLOR_BGR2GRAY)
+    #edges = cv2.Canny(gray.copy(), 50, 200, 5)
+    #rects = ExtractRectangles(edges, type_flag = cv2.RETR_LIST)
 
 
-    (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects, h_min = 20, w_min = 15)
+    (cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter, avg_w, avg_h) = CleanRectangles(rects, h_min = 20, w_min = 20)
     #cleaned_rects = sorted(cleaned_rects, key = (lambda x: x[2]*x[3]), reverse = True)[0:3]
     #cleaned_rects,cleaned_rects_vcenter,cleaned_rects_hcenter = removeChildrenRects(cleaned_rects)  
 
@@ -905,19 +993,24 @@ def getPapeletasRecibidas(img, d, model,scale):
 
     digits_problem, ddist = bad_cluster(digit_mean, avg_w//2)
     if(digits_problem):
-        print("Bad Clustering in totales: {}  digits: {}".format(totals_problem, digits_problem))
+        print("Bad Clustering in totales:  digits: {}".format(digits_problem))
         #print("Totales dist: {} digits dist: {}".format(tdist, ddist))
         #print("avg height: {} avg widht: {}".format(avg_h, avg_w))
         return 0,0,-3,0, 
 
-    cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
-    cleaned_rects = [(r[0]+dx, r[1]+dy, r[2], r[3]) for r in cleaned_rects ]
+    #cleaned_rects, totals_lbl, digit_lbl = GetStandardRects(avg_w, avg_h, digit_mean, totals_mean)
+    #cleaned_rects = [(r[0]+dx, r[1]+dy, r[2], r[3]) for r in cleaned_rects ]
     totales, img_totales = GetNumericTotals(papeletas_crop.copy(), cleaned_rects, totals_lbl, digit_lbl, model, 1.2 )
 
 
-    #for rect in cleaned_rects:
-    #    (x, y, w, h) = rect #rects[0]
-    #    cv2.rectangle(digits_crop, (x, y), (x + w, y + h), (0, 255, 0), 2)
+    for rect in cleaned_rects:
+        (x, y, w, h) = rect #rects[0]
+        cv2.rectangle(papeletas_crop, (x, y), (x + w, y + h), (0, 255, 0), 2)
+
+    #cv2.imshow('fig',cv2.resize(papeletas_crop, None, fx=1., fy = 1.))
+    #cv2.waitKey()
+    #cv2.destroyAllWindows()
+
     #(x, y, w, h) = rects[0]
     #cv2.rectangle(papeletas_crop, (x, y), (x + w, y + h), (0, 0, 255), 2)
 
@@ -996,9 +1089,9 @@ if __name__ == '__main__':
                       'No se encontro la cantidad esperada de digitos',
                       'No se logro separar los digitos adecuadamente']
 
-    actas_dir = './datasets/2davuelta/sim/'
+    actas_dir = './datasets/2davuelta/real/'
     actas_dir_primera = './actas_original/presi_vice/'
-    actas_filenames = os.listdir(actas_dir)[:10]
+    actas_filenames = os.listdir(actas_dir)[:5000]
 
     model = loadPytorchModel()
     #model = loadKerasModel()
@@ -1028,8 +1121,8 @@ if __name__ == '__main__':
                 with open(out_json_save_path + json_name, 'w') as json_file:
                     json.dump(json_data, json_file)
 
-                #cv2.imshow('fig',cv2.resize(img_with_data, None, fx=1.0, fy = 1.0))
-                cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.5, fy = 0.5))
+                #cv2.imshow('fig',cv2.resize(img_with_data, None, fx=.25, fy = 0.25))
+                #cv2.imwrite(out_image_save_path+file,cv2.resize(img_with_data, None, fx=0.5, fy = 0.5))
                 #cv2.waitKey()
                 #cv2.destroyAllWindows() 
                 success = success+1
@@ -1061,7 +1154,7 @@ if __name__ == '__main__':
     (x, y, w, h) = (int(coords[0]), int(coords[1]), int(coords[2]), int(coords[3]))
     img = cv2.rectangle(img, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
-    cv2.imshow('fig',img)
+    ccv2.imshow('fig',cv2.resize(img_with_data, None, fx=.25, fy = 0.25))
     cv2.waitKey()
     cv2.destroyAllWindows()
 """
