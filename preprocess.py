@@ -1099,8 +1099,14 @@ if __name__ == '__main__':
     success = 0
     for i, file in enumerate(actas_filenames):
 
-        print("Imagen {}: {}".format(i,file))
-        original = cv2.imread(actas_dir + file)
+        print("Imagen {}: {}".format(i, file))
+        
+        try:
+            original = cv2.imread(actas_dir + file)
+            original.copy()
+        except:
+            print("Imagen {} no se pudo recuperar con exito.".format(file))
+            continue
         try:
             t1 = time.time()
             data, img_with_data, problem = processActa(original.copy(), model)
